@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Modify Menu</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=3" />
 </head>
 <body>
   <header class="topbar">
@@ -35,10 +35,14 @@
           <label for="item-price">Price</label>
           <input class="input" id="item-price" type="number" min="0" step="0.01" required />
         </div>
-        <div class="field">
+        <div class="field wide">
+          <label for="item-img">Image URL <span class="muted">(optional)</span></label>
+          <input class="input" id="item-img" type="url" maxlength="500" placeholder="https://…" />
+        </div>
+        <div class="field check-field">
           <label><input type="checkbox" id="item-active" checked /> Available</label>
         </div>
-        <div class="row-actions" style="grid-column:-2/-1;justify-content:flex-start">
+        <div class="form-actions">
           <button class="btn" type="submit" id="save-btn">Add</button>
           <button class="btn btn-ghost hidden" type="button" id="cancel-btn">Cancel</button>
         </div>
@@ -58,8 +62,8 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/common.js"></script>
+  <script src="js/config.js?v=3"></script>
+  <script src="js/common.js?v=3"></script>
   <script>
     const { rpc, money, esc, toast } = App;
     let me, items = [];
@@ -94,7 +98,10 @@
         ? list
             .map(
               (i) => `<tr>
-          <td><strong>${esc(i.name)}</strong></td>
+          <td><div class="name-cell">
+            <div class="thumb thumb-sm" aria-hidden="true">${esc(i.name.charAt(0).toUpperCase())}${i.image_url ? `<img src="${esc(i.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : ""}</div>
+            <strong>${esc(i.name)}</strong>
+          </div></td>
           <td>${esc(i.category)}</td>
           <td class="num">${money(i.price)}</td>
           <td><span class="badge ${i.is_active ? "badge-paid" : ""}">${i.is_active ? "available" : "hidden"}</span></td>
@@ -131,6 +138,7 @@
           p_category: $("item-cat").value,
           p_price: Number($("item-price").value),
           p_is_active: $("item-active").checked,
+          p_image_url: $("item-img").value.trim() || null,
         });
         toast(id ? "Item updated" : "Item added", "success");
         resetForm();
@@ -152,6 +160,7 @@
         $("item-cat").value = i.category;
         $("item-price").value = i.price;
         $("item-active").checked = i.is_active;
+        $("item-img").value = i.image_url || "";
         $("form-title").textContent = `Edit “${i.name}”`;
         $("save-btn").textContent = "Save";
         $("cancel-btn").classList.remove("hidden");

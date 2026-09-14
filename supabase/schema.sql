@@ -36,6 +36,7 @@ create table if not exists public.menu_items (
   name       text not null,
   category   text not null default 'General',
   price      numeric(10,2) not null check (price >= 0),
+  image_url  text,
   is_active  boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -66,6 +67,9 @@ create table if not exists public.order_items (
   qty          int not null check (qty > 0)
 );
 create index if not exists order_items_order_idx on public.order_items(order_id);
+
+-- Columns added after the first release (safe on existing databases)
+alter table public.menu_items add column if not exists image_url text;
 
 alter table public.admins         enable row level security;
 alter table public.admin_sessions enable row level security;
@@ -170,26 +174,35 @@ begin
     order by category, name;
 end $$;
 
+drop function if exists public.upsert_menu_item(uuid, bigint, text, text, numeric, boolean);
+
 create or replace function public.upsert_menu_item(
-  p_token uuid, p_id bigint, p_name text, p_category text, p_price numeric, p_is_active boolean)
+  p_token uuid, p_id bigint, p_name text, p_category text, p_price numeric, p_is_active boolean,
+  p_image_url text default null)
 returns public.menu_items
 language plpgsql security definer set search_path = public, extensions
 as $$
-declare m public.menu_items;
+declare
+  m     public.menu_items;
+  v_img text := nullif(trim(p_image_url), '');
 begin
   perform public._require_admin(p_token, true);
   if coalesce(trim(p_name), '') = '' then raise exception 'Name is required.'; end if;
+  if v_img is not null and v_img !~* '^https?://' then
+    raise exception 'Image URL must start with http:// or https://';
+  end if;
 
   if p_id is null then
-    insert into public.menu_items(name, category, price, is_active)
-    values (trim(p_name), coalesce(nullif(trim(p_category), ''), 'General'), p_price, coalesce(p_is_active, true))
+    insert into public.menu_items(name, category, price, is_active, image_url)
+    values (trim(p_name), coalesce(nullif(trim(p_category), ''), 'General'), p_price, coalesce(p_is_active, true), v_img)
     returning * into m;
   else
     update public.menu_items
        set name = trim(p_name),
            category = coalesce(nullif(trim(p_category), ''), 'General'),
            price = p_price,
-           is_active = coalesce(p_is_active, true)
+           is_active = coalesce(p_is_active, true),
+           image_url = v_img
      where id = p_id
     returning * into m;
     if m.id is null then raise exception 'Menu item not found.'; end if;
@@ -224,8 +237,8 @@ declare
 begin
   a := public._require_admin(p_token);
 
-  if length(v_phone) < 6 or length(v_phone) > 15 then
-    raise exception 'Enter a valid phone number.';
+  if v_phone !~ '^[0-9]{10}$' then
+    raise exception 'Enter a valid 10-digit phone number.';
   end if;
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
     raise exception 'Add at least one item.';
@@ -310,7 +323,7 @@ revoke all on function public._require_admin(uuid, boolean) from public, anon, a
 revoke all on function
   public.admin_login(text, text), public.admin_logout(uuid), public.admin_me(uuid),
   public.get_orders_by_phone(text), public.list_menu(uuid, boolean),
-  public.upsert_menu_item(uuid, bigint, text, text, numeric, boolean),
+  public.upsert_menu_item(uuid, bigint, text, text, numeric, boolean, text),
   public.delete_menu_item(uuid, bigint), public.create_order(uuid, text, text, jsonb),
   public.list_orders(uuid, text, int, int), public.update_order_status(uuid, bigint, text),
   public.delete_order(uuid, bigint)
@@ -319,7 +332,7 @@ from public;
 grant execute on function
   public.admin_login(text, text), public.admin_logout(uuid), public.admin_me(uuid),
   public.get_orders_by_phone(text), public.list_menu(uuid, boolean),
-  public.upsert_menu_item(uuid, bigint, text, text, numeric, boolean),
+  public.upsert_menu_item(uuid, bigint, text, text, numeric, boolean, text),
   public.delete_menu_item(uuid, bigint), public.create_order(uuid, text, text, jsonb),
   public.list_orders(uuid, text, int, int), public.update_order_status(uuid, bigint, text),
   public.delete_order(uuid, bigint)

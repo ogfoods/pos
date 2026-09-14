@@ -2,6 +2,8 @@
 
 Static, responsive POS billing web app. Hosted on GitHub Pages, data in Supabase.
 
+Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
+
 ## Pages
 
 | Page | Who | What |

@@ -1,0 +1,222 @@
+# User Guide
+
+This guide lists every feature of POS Billing and explains how to use it.
+
+Live site: https://ogfoods.github.io/pos/
+
+## Who can do what
+
+| Feature | Customer (no login) | Admin | Super admin |
+|---|:---:|:---:|:---:|
+| Search order history by phone | ✅ | ✅ | ✅ |
+| Log in / log out | — | ✅ | ✅ |
+| Create a new bill | — | ✅ | ✅ |
+| Manage bills (view, change status, delete) | — | ❌ | ✅ |
+| Modify menu items | — | ❌ | ✅ |
+
+---
+
+## 1. Customer: view order history
+
+**Page:** home page (`index.html`)
+
+1. Open the site.
+2. Type your phone number in the search bar. Spaces and dashes are fine; only digits are used. At least 6 digits are needed.
+3. Press **Search** (or Enter).
+
+You will see:
+- Number of orders and the **total spent** (cancelled orders are not counted).
+- One card per order, newest first, showing order number, date and time, status (paid / pending / cancelled), each item with quantity and price, and the order total.
+
+If nothing appears, check that the number matches the one given at billing.
+
+---
+
+## 2. Admin login
+
+**Page:** click **Login** at the top-right of the home page (`adminlogin.html`)
+
+1. Enter your **username** and **password**.
+2. Click the **eye icon** in the password field to show or hide what you typed.
+3. Click **Login**.
+
+- Wrong details show **"Invalid username or password."**
+- A login lasts **12 hours**. After that you are sent back to the login page automatically.
+- If you are already logged in, opening the login page takes you straight to the dashboard.
+- Click **Logout** (top-right on any admin page) when you finish, especially on a shared device.
+
+Accounts are not created in the app. See [Managing admin accounts](#6-managing-admin-accounts-owner--developer).
+
+---
+
+## 3. Dashboard
+
+**Page:** `dashboard.html` (opens after login)
+
+The header shows your username and role. The page has three cards:
+
+| Card | What it does | Available to |
+|---|---|---|
+| **New bill** | Opens the billing window | All admins |
+| **Manage bills** | Opens the bill management page | Super admin only |
+| **Modify menu items** | Opens the menu editor | Super admin only |
+
+For a normal admin, the two super admin cards are greyed out with a 🔒 label, and clicking them shows a message.
+
+---
+
+## 4. Create a new bill
+
+**Where:** Dashboard → **New bill**
+
+The window has three steps. The bar at the top shows which step you are on. Use **Back** to return to an earlier step without losing your entries.
+
+### Step 1 — Customer details
+1. Enter the customer's **phone number** (required, exactly 10 digits — letters and symbols are ignored).
+2. Enter the **customer name** (optional). If left blank for a returning customer, their saved name is used.
+3. Click **Next**.
+
+### Step 2 — Select items
+1. Tap a category chip (**All**, Snacks, Beverages, …) to narrow the list, or type in **Filter items…** to search by name or category.
+2. Each item shows its photo (or first letter), name, category and price. Use **+** and **−** to set the quantity. Selected items are highlighted.
+3. The bar at the bottom shows a cart badge with the item count and the running total.
+4. Click **Next** (at least one item is required).
+
+If the list is empty, a super admin needs to add menu items first.
+
+### Step 3 — Payment
+1. Check the customer, item list and **total amount**.
+2. The customer scans the **QR code** with any UPI app (GPay, PhonePe, Paytm, etc.). The amount is pre-filled.
+3. After payment is received, click **Done**.
+
+A message such as **"Order #12 saved · ₹240.00"** confirms the bill. The order is saved under the customer's phone number and appears in their history immediately.
+
+> The QR currently uses the sample UPI ID from `js/config.js`. Replace `UPI_ID` with your real UPI ID before accepting payments.
+
+**Tips**
+- Close the window with **×**, the **Esc** key, or by tapping outside it. If items are selected, you will be asked to confirm discarding the bill.
+- Prices on the bill always come from the current menu; they cannot be changed during billing.
+
+---
+
+## 5. Super admin features
+
+### 5.1 Manage bills
+
+**Where:** Dashboard → **Manage bills** (`managebills.html`)
+
+The table lists all orders, newest first, 25 per page, with order number, date, customer name and phone, number of items, total, status, and who created the bill.
+
+| Task | How |
+|---|---|
+| **Search** | Type a phone number (or part of one), a customer name, or an exact order number. Results update as you type. |
+| **Change pages** | Use **← Prev** / **Next →** below the table. |
+| **View details** | Click **View** to see the full item list and total. |
+| **Change status** | Pick **paid**, **pending** or **cancelled** from the status dropdown. It saves immediately. |
+| **Delete a bill** | Click **Delete** and confirm. This permanently removes the order and cannot be undone. |
+
+Tip: prefer marking a wrong bill as **cancelled** instead of deleting it, so there is a record. Cancelled orders are excluded from the customer's "total spent".
+
+On phones, swipe the table sideways to see all columns.
+
+### 5.2 Modify menu items
+
+**Where:** Dashboard → **Modify menu items** (`menu.html`)
+
+**Add an item**
+1. Fill in **Name**, **Category** (pick an existing one from suggestions or type a new one; blank becomes "General") and **Price**.
+2. Optionally paste an **Image URL** (must start with `https://`). The photo appears in New bill; without one, the item's first letter is shown.
+3. Keep **Available** ticked so it appears when billing.
+4. Click **Add**.
+
+**Edit an item**
+1. Click **Edit** on the item's row. The form at the top fills in.
+2. Change the details and click **Save**, or **Cancel** to stop editing.
+
+**Hide an item** (for example, out of stock)
+- Edit it, untick **Available**, and save. It shows as "hidden" and no longer appears in New bill. Tick it again to bring it back.
+
+**Delete an item**
+- Click **Delete** and confirm. Past bills keep the item's name and price, so history is not affected.
+
+**Filter** — type in **Filter items…** above the table to search by name or category.
+
+Price changes only affect new bills; existing bills keep the price they were created with.
+
+---
+
+## 6. Managing admin accounts (owner / developer)
+
+Admin accounts are managed directly in Supabase, not in the app.
+
+1. Open the Supabase project → **SQL Editor**.
+2. Run the relevant query below.
+
+**Add an admin**
+```sql
+insert into public.admins (username, password_hash, role)
+values ('cashier2', crypt('StrongPassword', gen_salt('bf')), 'admin');   -- or 'super'
+```
+
+**Change a password**
+```sql
+update public.admins
+set password_hash = crypt('NewStrongPassword', gen_salt('bf'))
+where username = 'cashier2';
+```
+
+**Change a role**
+```sql
+update public.admins set role = 'super' where username = 'cashier2';
+```
+
+**Disable an account** (keeps their past bills linked)
+```sql
+update public.admins set is_active = false where username = 'cashier2';
+```
+
+**Sign everyone out immediately**
+```sql
+delete from public.admin_sessions;
+```
+
+Important:
+- Always set passwords with `crypt(..., gen_salt('bf'))`. A plain-text password in `password_hash` will not work.
+- Usernames are not case-sensitive at login.
+
+---
+
+## 7. Shop settings
+
+Edit `js/config.js`, then commit and push:
+
+| Setting | Example | Effect |
+|---|---|---|
+| `SHOP_NAME` | `"OG Foods"` | Header title and UPI payee name |
+| `CURRENCY` | `"₹"` | Symbol shown before amounts |
+| `UPI_ID` | `"ogfoods@okaxis"` | Where QR payments are sent |
+
+GitHub Pages updates in a minute or two. Hard-refresh (Ctrl+Shift+R) to see changes.
+
+---
+
+## 8. Using on phones and tablets
+
+- All pages adapt to screen size; the dashboard cards stack on narrow screens.
+- On phones the New bill window opens full-screen with an app-style layout: numbered steps, category chips, item photos, and a cart bar at the bottom. On larger screens it opens as a compact centred window.
+- Dark mode follows the device setting.
+- Tip: add the site to your home screen from the browser menu for quick access at the counter.
+
+---
+
+## 9. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "Invalid username or password." | Check spelling; confirm the account exists, is active, and the password was set with `crypt()`. |
+| Sent back to login unexpectedly | The 12-hour session expired or the account was disabled. Log in again. |
+| "Super admin access required." | Your account is a normal admin. Ask the owner to change your role. |
+| New bill shows no items | No available menu items. A super admin must add items or tick **Available**. |
+| QR code not showing | Check the internet connection (the QR library loads from a CDN) and refresh. |
+| Changes not visible after pushing | Wait 1–2 minutes for GitHub Pages, then hard-refresh. |
+| Page shows errors about the database | Check `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `js/config.js` and that `schema.sql` was run. |

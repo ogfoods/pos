@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=3" />
 </head>
 <body>
   <header class="topbar">
@@ -47,22 +47,27 @@
   </main>
 
   <!-- New bill modal -->
-  <div class="modal-backdrop hidden" id="bill-modal" role="dialog" aria-modal="true" aria-labelledby="bill-title">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 id="bill-title" style="margin:0">New bill</h2>
+  <div class="modal-backdrop bill-backdrop hidden" id="bill-modal" role="dialog" aria-modal="true" aria-labelledby="bill-title">
+    <div class="modal bill">
+      <div class="bill-head">
         <button class="icon-btn" type="button" id="bill-close" aria-label="Close">×</button>
+        <h2 id="bill-title">New Bill</h2>
+        <span class="bill-shop" data-shop-name>Shop</span>
       </div>
 
       <div class="modal-body">
-        <div class="steps"><span></span><span></span><span></span></div>
+        <ol class="stepper">
+          <li><span class="dot">1</span><span>Customer Details</span></li>
+          <li><span class="dot">2</span><span>Add Menu Items</span></li>
+          <li><span class="dot">3</span><span>Payment</span></li>
+        </ol>
 
         <!-- Step 1: customer -->
         <section data-step="0">
-          <h3>Customer details</h3>
+          <h3 class="step-title">Customer details</h3>
           <div class="field">
             <label for="c-phone">Phone number *</label>
-            <input class="input" id="c-phone" type="tel" inputmode="numeric" maxlength="15" placeholder="e.g. 9876543210" />
+            <input class="input" id="c-phone" type="tel" inputmode="numeric" autocomplete="off" pattern="[0-9]{10}" placeholder="10-digit number, e.g. 9876543210" />
           </div>
           <div class="field">
             <label for="c-name">Customer name <span class="muted">(optional)</span></label>
@@ -72,15 +77,18 @@
 
         <!-- Step 2: items -->
         <section data-step="1" class="hidden">
-          <h3>Select items</h3>
-          <input class="input" id="item-filter" placeholder="Filter items…" style="margin-bottom:.5rem" />
+          <h3 class="step-title">Select items</h3>
+          <div class="search-field">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="input" id="item-filter" type="search" placeholder="Filter items…" aria-label="Filter items" />
+          </div>
+          <div class="chips" id="chips" role="toolbar" aria-label="Categories"></div>
           <div class="menu-pick" id="menu-pick"></div>
-          <div class="sticky-total"><span id="item-count">0 items</span><span id="cart-total">₹0.00</span></div>
         </section>
 
         <!-- Step 3: payment -->
         <section data-step="2" class="hidden pay">
-          <h3>Payment</h3>
+          <h3 class="step-title">Payment</h3>
           <p class="muted" id="pay-for"></p>
           <div class="pay-amount" id="pay-amount"></div>
           <div class="qr-box"><div id="qr"></div></div>
@@ -89,23 +97,42 @@
         </section>
       </div>
 
-      <div class="modal-foot">
-        <button class="btn btn-ghost" type="button" id="bill-back">Back</button>
-        <button class="btn" type="button" id="bill-next">Next</button>
+      <div class="bill-foot">
+        <div class="cart-bar">
+          <div class="cart-summary" id="cart-summary">
+            <div class="cart-icon">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1.5 1.5 0 0 0 1.5 1.2h8.7a1.5 1.5 0 0 0 1.5-1.1L21 7H6"/></svg>
+              <span class="cart-badge" id="cart-badge">0</span>
+            </div>
+            <div>
+              <div class="cart-count" id="item-count">0 items</div>
+              <div class="cart-total">Total: <span id="cart-total">₹0.00</span></div>
+            </div>
+          </div>
+          <button class="btn btn-next" type="button" id="bill-next">Next</button>
+        </div>
+        <div class="bill-back-row">
+          <button class="link-btn" type="button" id="bill-back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            Back
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/common.js"></script>
+  <script src="js/config.js?v=3"></script>
+  <script src="js/common.js?v=3"></script>
   <script>
     const { rpc, money, esc, digits, toast, renderItems, cfg } = App;
     let me = null;
     let menu = [];
     const cart = new Map(); // menu_item_id -> qty
     let step = 0;
+    let activeCat = "All";
+    const ARROW = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>`;
 
     (async () => {
       try {
@@ -135,6 +162,15 @@
     const phoneIn = document.getElementById("c-phone");
     const nameIn = document.getElementById("c-name");
 
+    // Digits only, max 10.
+    phoneIn.addEventListener("input", () => {
+      const clean = digits(phoneIn.value).slice(0, 10);
+      if (phoneIn.value !== clean) phoneIn.value = clean;
+    });
+    phoneIn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") nextBtn.click();
+    });
+
     document.getElementById("card-new-bill").addEventListener("click", openBill);
     document.getElementById("bill-close").addEventListener("click", closeBill);
     modal.addEventListener("click", (e) => { if (e.target === modal) closeBill(); });
@@ -145,6 +181,7 @@
       phoneIn.value = "";
       nameIn.value = "";
       document.getElementById("item-filter").value = "";
+      activeCat = "All";
       showStep(0);
       modal.classList.remove("hidden");
       document.body.style.overflow = "hidden";
@@ -160,17 +197,27 @@
     function showStep(n) {
       step = n;
       document.querySelectorAll("[data-step]").forEach((s) => s.classList.toggle("hidden", Number(s.dataset.step) !== n));
-      document.querySelectorAll(".steps span").forEach((s, i) => s.classList.toggle("active", i <= n));
-      backBtn.style.visibility = n === 0 ? "hidden" : "visible";
-      nextBtn.textContent = n === 2 ? "Done" : "Next";
+      document.querySelectorAll(".stepper li").forEach((li, i) => {
+        li.classList.toggle("done", i < n);
+        li.classList.toggle("active", i === n);
+        if (i === n) li.setAttribute("aria-current", "step");
+        else li.removeAttribute("aria-current");
+      });
+      backBtn.parentElement.style.visibility = n === 0 ? "hidden" : "visible";
+      document.getElementById("cart-summary").classList.toggle("hidden", n === 0);
+      nextBtn.innerHTML = n === 2 ? "Done" : `Next ${ARROW}`;
       nextBtn.disabled = false;
+      modal.querySelector(".modal-body").scrollTop = 0;
     }
 
     backBtn.addEventListener("click", () => showStep(Math.max(0, step - 1)));
     nextBtn.addEventListener("click", async () => {
       if (step === 0) {
         const p = digits(phoneIn.value);
-        if (p.length < 6 || p.length > 15) return toast("Enter a valid phone number.", "error");
+        if (!/^\d{10}$/.test(p)) {
+          phoneIn.focus();
+          return toast("Enter a valid 10-digit phone number.", "error");
+        }
         phoneIn.value = p;
         nextBtn.disabled = true;
         await loadMenu();
@@ -188,6 +235,7 @@
     async function loadMenu() {
       try {
         menu = await rpc("list_menu", { p_token: me.token, p_include_inactive: false });
+        renderChips();
         renderMenu();
       } catch (err) {
         toast(err.message, "error");
@@ -196,10 +244,32 @@
 
     document.getElementById("item-filter").addEventListener("input", renderMenu);
 
+    function renderChips() {
+      const cats = ["All", ...new Set(menu.map((m) => m.category))];
+      if (!cats.includes(activeCat)) activeCat = "All";
+      document.getElementById("chips").innerHTML = menu.length
+        ? cats
+            .map((c) => `<button type="button" class="chip ${c === activeCat ? "active" : ""}" data-cat="${esc(c)}" aria-pressed="${c === activeCat}">${esc(c)}</button>`)
+            .join("")
+        : "";
+    }
+
+    document.getElementById("chips").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-cat]");
+      if (!chip) return;
+      activeCat = chip.dataset.cat;
+      renderChips();
+      renderMenu();
+    });
+
     function renderMenu() {
       const box = document.getElementById("menu-pick");
       const q = document.getElementById("item-filter").value.trim().toLowerCase();
-      const list = menu.filter((m) => !q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
+      const list = menu.filter(
+        (m) =>
+          (activeCat === "All" || m.category === activeCat) &&
+          (!q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q))
+      );
       if (!menu.length) {
         box.innerHTML = `<div class="empty">No menu items yet. Ask super admin to add items.</div>`;
       } else if (!list.length) {
@@ -209,15 +279,21 @@
         box.innerHTML = list
           .map((m) => {
             const qty = cart.get(m.id) || 0;
+            const img = m.image_url ? `<img src="${esc(m.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : "";
             const head = m.category !== lastCat ? `<div class="menu-cat">${esc(m.category)}</div>` : "";
             lastCat = m.category;
             return `${head}
-              <div class="menu-row ${qty ? "selected" : ""}">
-                <div><strong>${esc(m.name)}</strong><div class="muted">${money(m.price)}</div></div>
+              <div class="item-card ${qty ? "selected" : ""}">
+                <div class="thumb" aria-hidden="true">${esc(m.name.charAt(0).toUpperCase())}${img}</div>
+                <div class="item-info">
+                  <div class="item-name">${esc(m.name)}</div>
+                  <div class="item-cat">${esc(m.category)}</div>
+                  <div class="item-price">${money(m.price)}</div>
+                </div>
                 <div class="qty">
-                  <button type="button" data-id="${m.id}" data-d="-1" aria-label="Decrease">−</button>
+                  <button type="button" data-id="${m.id}" data-d="-1" aria-label="Decrease ${esc(m.name)}" ${qty ? "" : "disabled"}>−</button>
                   <span>${qty}</span>
-                  <button type="button" data-id="${m.id}" data-d="1" aria-label="Increase">+</button>
+                  <button type="button" class="plus" data-id="${m.id}" data-d="1" aria-label="Increase ${esc(m.name)}">+</button>
                 </div>
               </div>`;
           })
@@ -246,6 +322,7 @@
       const lines = cartLines();
       const count = lines.reduce((s, l) => s + l.qty, 0);
       document.getElementById("item-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
+      document.getElementById("cart-badge").textContent = count;
       document.getElementById("cart-total").textContent = money(lines.reduce((s, l) => s + l.price * l.qty, 0));
     }
 
