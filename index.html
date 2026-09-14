@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order History</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn" href="adminlogin.html">Login</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h1>Find your orders</h1>
+      <p class="muted">Enter the phone number you used while billing to see your order history.</p>
+      <form class="search" id="search-form" autocomplete="off">
+        <input class="input" id="phone" type="tel" inputmode="numeric" placeholder="Search by phone number" required />
+        <button class="btn" type="submit">Search</button>
+      </form>
+    </section>
+
+    <section class="results" id="results" aria-live="polite"></section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    const { rpc, money, fmtDate, esc, digits, renderItems } = App;
+    const form = document.getElementById("search-form");
+    const results = document.getElementById("results");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const phone = digits(document.getElementById("phone").value);
+      if (phone.length < 6) {
+        results.innerHTML = `<div class="empty">Please enter a valid phone number.</div>`;
+        return;
+      }
+      const btn = form.querySelector("button");
+      btn.disabled = true;
+      results.innerHTML = `<div class="empty">Searching…</div>`;
+      try {
+        const orders = await rpc("get_orders_by_phone", { p_phone: phone });
+        if (!orders.length) {
+          results.innerHTML = `<div class="empty">No orders found for ${esc(phone)}.</div>`;
+          return;
+        }
+        const spent = orders.filter((o) => o.payment_status !== "cancelled").reduce((s, o) => s + Number(o.total), 0);
+        results.innerHTML =
+          `<p class="muted">${orders.length} order(s) · Total spent <strong>${money(spent)}</strong></p>` +
+          orders
+            .map(
+              (o) => `
+            <article class="card order-card">
+              <header>
+                <div><strong>Order #${o.id}</strong><div class="muted">${fmtDate(o.created_at)}</div></div>
+                <span class="badge badge-${esc(o.payment_status)}">${esc(o.payment_status)}</span>
+              </header>
+              <ul class="order-items">${renderItems(o.items)}</ul>
+              <div class="order-total"><span>Total</span><span>${money(o.total)}</span></div>
+            </article>`
+            )
+            .join("");
+      } catch (err) {
+        results.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

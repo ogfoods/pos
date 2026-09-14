@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Login</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right"><a class="btn btn-ghost btn-sm" href="index.html">← Home</a></div>
+  </header>
+
+  <main class="auth-wrap">
+    <form class="card auth-card" id="login-form" autocomplete="on">
+      <h1>Admin login</h1>
+      <p class="muted">Sign in to create and manage bills.</p>
+      <div class="field">
+        <label for="username">Username</label>
+        <input class="input" id="username" name="username" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input class="input" id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <p class="error-text" id="error"></p>
+      <button class="btn btn-block" type="submit">Login</button>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    if (App.session.get()) location.replace("dashboard.html");
+
+    const form = document.getElementById("login-form");
+    const errorEl = document.getElementById("error");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      const btn = form.querySelector("button");
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      try {
+        const s = await App.rpc("admin_login", {
+          p_username: document.getElementById("username").value,
+          p_password: document.getElementById("password").value,
+        });
+        App.session.set(s);
+        location.replace("dashboard.html");
+      } catch (err) {
+        errorEl.textContent = err.message;
+        btn.disabled = false;
+        btn.textContent = "Login";
+      }
+    });
+  </script>
+</body>
+</html>

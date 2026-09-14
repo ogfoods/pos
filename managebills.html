@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Bills</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Manage bills</h1>
+    <div class="toolbar">
+      <input class="input" id="q" placeholder="Search phone, name or order #" />
+      <span class="muted" id="count"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Date</th><th>Customer</th><th>Items</th><th class="num">Total</th><th>Status</th><th>By</th><th></th></tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <button class="btn btn-ghost btn-sm" id="prev">← Prev</button>
+      <span class="muted" id="page-info"></span>
+      <button class="btn btn-ghost btn-sm" id="next">Next →</button>
+    </div>
+  </main>
+
+  <!-- Order detail modal -->
+  <div class="modal-backdrop hidden" id="detail" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 style="margin:0" id="d-title">Order</h2>
+        <button class="icon-btn" type="button" onclick="closeDetail()" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body" id="d-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    const { rpc, money, fmtDate, esc, toast, renderItems } = App;
+    const PAGE = 25;
+    let me, offset = 0, total = 0, rows = [], timer;
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    document.getElementById("q").addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { offset = 0; load(); }, 300);
+    });
+    document.getElementById("prev").onclick = () => { offset = Math.max(0, offset - PAGE); load(); };
+    document.getElementById("next").onclick = () => { offset += PAGE; load(); };
+
+    async function load() {
+      try {
+        const res = await rpc("list_orders", {
+          p_token: me.token,
+          p_search: document.getElementById("q").value,
+          p_limit: PAGE,
+          p_offset: offset,
+        });
+        rows = res.rows;
+        total = res.total_count;
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    function render() {
+      const tbody = document.getElementById("rows");
+      document.getElementById("count").textContent = `${total} order(s)`;
+      const page = Math.floor(offset / PAGE) + 1;
+      const pages = Math.max(1, Math.ceil(total / PAGE));
+      document.getElementById("page-info").textContent = `Page ${page} of ${pages}`;
+      document.getElementById("prev").disabled = offset === 0;
+      document.getElementById("next").disabled = offset + PAGE >= total;
+
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty">No orders found.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows
+        .map((o) => {
+          const qty = (o.items || []).reduce((s, i) => s + i.qty, 0);
+          return `<tr>
+            <td>${o.id}</td>
+            <td>${fmtDate(o.created_at)}</td>
+            <td>${esc(o.customer_name || "—")}<div class="muted">${esc(o.phone)}</div></td>
+            <td>${qty}</td>
+            <td class="num">${money(o.total)}</td>
+            <td>
+              <select class="input btn-sm" data-status="${o.id}" style="width:auto">
+                ${["paid", "pending", "cancelled"].map((s) => `<option ${s === o.payment_status ? "selected" : ""}>${s}</option>`).join("")}
+              </select>
+            </td>
+            <td class="muted">${esc(o.created_by || "—")}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-ghost btn-sm" data-view="${o.id}">View</button>
+              <button class="btn btn-danger btn-sm" data-del="${o.id}">Delete</button>
+            </div></td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    document.getElementById("rows").addEventListener("click", async (e) => {
+      const view = e.target.closest("[data-view]");
+      const del = e.target.closest("[data-del]");
+      if (view) return openDetail(Number(view.dataset.view));
+      if (del) {
+        const id = Number(del.dataset.del);
+        if (!confirm(`Delete order #${id}? This cannot be undone.`)) return;
+        try {
+          await rpc("delete_order", { p_token: me.token, p_id: id });
+          toast(`Order #${id} deleted`, "success");
+          if (rows.length === 1 && offset > 0) offset -= PAGE;
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+    });
+
+    document.getElementById("rows").addEventListener("change", async (e) => {
+      const sel = e.target.closest("[data-status]");
+      if (!sel) return;
+      try {
+        await rpc("update_order_status", { p_token: me.token, p_id: Number(sel.dataset.status), p_status: sel.value });
+        toast("Status updated", "success");
+      } catch (err) {
+        toast(err.message, "error");
+        load();
+      }
+    });
+
+    function openDetail(id) {
+      const o = rows.find((r) => r.id === id);
+      document.getElementById("d-title").textContent = `Order #${o.id}`;
+      document.getElementById("d-body").innerHTML = `
+        <p><strong>${esc(o.customer_name || "Customer")}</strong> · ${esc(o.phone)}<br>
+        <span class="muted">${fmtDate(o.created_at)} · by ${esc(o.created_by || "—")}</span></p>
+        <ul class="order-items">${renderItems(o.items)}</ul>
+        <div class="order-total"><span>Total</span><span>${money(o.total)}</span></div>`;
+      document.getElementById("detail").classList.remove("hidden");
+    }
+    function closeDetail() { document.getElementById("detail").classList.add("hidden"); }
+    document.getElementById("detail").addEventListener("click", (e) => { if (e.target.id === "detail") closeDetail(); });
+  </script>
+</body>
+</html>

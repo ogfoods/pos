@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modify Menu</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Modify menu items</h1>
+
+    <form class="card" id="item-form" style="margin:1rem 0 1.5rem">
+      <h3 id="form-title">Add item</h3>
+      <input type="hidden" id="item-id" />
+      <div class="form-grid">
+        <div class="field span-2">
+          <label for="item-name">Name</label>
+          <input class="input" id="item-name" maxlength="80" required />
+        </div>
+        <div class="field">
+          <label for="item-cat">Category</label>
+          <input class="input" id="item-cat" list="cats" maxlength="40" placeholder="General" />
+          <datalist id="cats"></datalist>
+        </div>
+        <div class="field">
+          <label for="item-price">Price</label>
+          <input class="input" id="item-price" type="number" min="0" step="0.01" required />
+        </div>
+        <div class="field">
+          <label><input type="checkbox" id="item-active" checked /> Available</label>
+        </div>
+        <div class="row-actions" style="grid-column:-2/-1;justify-content:flex-start">
+          <button class="btn" type="submit" id="save-btn">Add</button>
+          <button class="btn btn-ghost hidden" type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="toolbar">
+      <input class="input" id="filter" placeholder="Filter items…" />
+      <span class="muted" id="count"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Category</th><th class="num">Price</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    const { rpc, money, esc, toast } = App;
+    let me, items = [];
+    const $ = (id) => document.getElementById(id);
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    async function load() {
+      try {
+        items = await rpc("list_menu", { p_token: me.token, p_include_inactive: true });
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    $("filter").addEventListener("input", render);
+
+    function render() {
+      const q = $("filter").value.trim().toLowerCase();
+      const list = items.filter((i) => !q || i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+      $("count").textContent = `${items.length} item(s)`;
+      $("cats").innerHTML = [...new Set(items.map((i) => i.category))].map((c) => `<option value="${esc(c)}">`).join("");
+      $("rows").innerHTML = list.length
+        ? list
+            .map(
+              (i) => `<tr>
+          <td><strong>${esc(i.name)}</strong></td>
+          <td>${esc(i.category)}</td>
+          <td class="num">${money(i.price)}</td>
+          <td><span class="badge ${i.is_active ? "badge-paid" : ""}">${i.is_active ? "available" : "hidden"}</span></td>
+          <td><div class="row-actions">
+            <button class="btn btn-ghost btn-sm" data-edit="${i.id}">Edit</button>
+            <button class="btn btn-danger btn-sm" data-del="${i.id}">Delete</button>
+          </div></td>
+        </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5" class="empty">${items.length ? "No matching items." : "No items yet. Add your first one above."}</td></tr>`;
+    }
+
+    function resetForm() {
+      $("item-form").reset();
+      $("item-id").value = "";
+      $("item-active").checked = true;
+      $("form-title").textContent = "Add item";
+      $("save-btn").textContent = "Add";
+      $("cancel-btn").classList.add("hidden");
+    }
+    $("cancel-btn").addEventListener("click", resetForm);
+
+    $("item-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("save-btn");
+      btn.disabled = true;
+      try {
+        const id = $("item-id").value ? Number($("item-id").value) : null;
+        await rpc("upsert_menu_item", {
+          p_token: me.token,
+          p_id: id,
+          p_name: $("item-name").value,
+          p_category: $("item-cat").value,
+          p_price: Number($("item-price").value),
+          p_is_active: $("item-active").checked,
+        });
+        toast(id ? "Item updated" : "Item added", "success");
+        resetForm();
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("rows").addEventListener("click", async (e) => {
+      const edit = e.target.closest("[data-edit]");
+      const del = e.target.closest("[data-del]");
+      if (edit) {
+        const i = items.find((x) => x.id === Number(edit.dataset.edit));
+        $("item-id").value = i.id;
+        $("item-name").value = i.name;
+        $("item-cat").value = i.category;
+        $("item-price").value = i.price;
+        $("item-active").checked = i.is_active;
+        $("form-title").textContent = `Edit “${i.name}”`;
+        $("save-btn").textContent = "Save";
+        $("cancel-btn").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        $("item-name").focus();
+      }
+      if (del) {
+        const i = items.find((x) => x.id === Number(del.dataset.del));
+        if (!confirm(`Delete “${i.name}”? Past bills keep their item names. Tip: untick "Available" to just hide it.`)) return;
+        try {
+          await rpc("delete_menu_item", { p_token: me.token, p_id: i.id });
+          toast("Item deleted", "success");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+    });
+  </script>
+</body>
+</html>
