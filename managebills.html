@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Manage Bills</title>
-  <link rel="stylesheet" href="css/style.css?v=5" />
+  <link rel="stylesheet" href="css/style.css?v=6" />
 </head>
 <body>
   <header class="topbar">
@@ -25,9 +25,9 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>Date</th><th>Customer</th><th>Items</th><th class="num">Total</th><th>Status</th><th>By</th><th></th></tr>
+          <tr><th>#</th><th>Date</th><th>Customer</th><th>Items</th><th class="num">Total</th><th>Method</th><th>Status</th><th>By</th><th></th></tr>
         </thead>
-        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+        <tbody id="rows"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
 
@@ -46,16 +46,20 @@
         <button class="icon-btn" type="button" onclick="closeDetail()" aria-label="Close">×</button>
       </div>
       <div class="modal-body" id="d-body"></div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" type="button" id="d-print">🖨️ Print receipt</button>
+        <a class="btn btn-ghost" id="d-wa" target="_blank" rel="noopener">WhatsApp</a>
+      </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=5"></script>
-  <script src="js/common.js?v=5"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/common.js?v=6"></script>
   <script>
-    const { rpc, money, fmtDate, esc, toast, renderItems } = App;
+    const { rpc, money, fmtDate, esc, toast, renderItems, methodLabel } = App;
     const PAGE = 25;
-    let me, offset = 0, total = 0, rows = [], timer;
+    let me, offset = 0, total = 0, rows = [], timer, current = null;
 
     (async () => {
       try {
@@ -99,7 +103,7 @@
       document.getElementById("next").disabled = offset + PAGE >= total;
 
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty">No orders found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty">No orders found.</td></tr>`;
         return;
       }
       tbody.innerHTML = rows
@@ -111,6 +115,7 @@
             <td>${esc(o.customer_name || "—")}<div class="muted">${esc(o.phone)}</div></td>
             <td>${qty}</td>
             <td class="num">${money(o.total)}</td>
+            <td>${methodLabel(o.payment_method)}</td>
             <td>
               <select class="input btn-sm" data-status="${o.id}" style="width:auto">
                 ${["paid", "pending", "cancelled"].map((s) => `<option ${s === o.payment_status ? "selected" : ""}>${s}</option>`).join("")}
@@ -147,8 +152,11 @@
     document.getElementById("rows").addEventListener("change", async (e) => {
       const sel = e.target.closest("[data-status]");
       if (!sel) return;
+      const id = Number(sel.dataset.status);
       try {
-        await rpc("update_order_status", { p_token: me.token, p_id: Number(sel.dataset.status), p_status: sel.value });
+        await rpc("update_order_status", { p_token: me.token, p_id: id, p_status: sel.value });
+        const o = rows.find((r) => r.id === id);
+        if (o) o.payment_status = sel.value;
         toast("Status updated", "success");
       } catch (err) {
         toast(err.message, "error");
@@ -158,16 +166,20 @@
 
     function openDetail(id) {
       const o = rows.find((r) => r.id === id);
+      current = o;
       document.getElementById("d-title").textContent = `Order #${o.id}`;
       document.getElementById("d-body").innerHTML = `
         <p><strong>${esc(o.customer_name || "Customer")}</strong> · ${esc(o.phone)}<br>
-        <span class="muted">${fmtDate(o.created_at)} · by ${esc(o.created_by || "—")}</span></p>
+        <span class="muted">${fmtDate(o.created_at)} · by ${esc(o.created_by || "—")}</span><br>
+        <span class="muted">${methodLabel(o.payment_method)} ·</span> <span class="badge badge-${esc(o.payment_status)}">${esc(o.payment_status)}</span></p>
         <ul class="order-items">${renderItems(o.items)}</ul>
         <div class="order-total"><span>Total</span><span>${money(o.total)}</span></div>`;
+      document.getElementById("d-wa").href = App.whatsappUrl(o);
       document.getElementById("detail").classList.remove("hidden");
     }
     function closeDetail() { document.getElementById("detail").classList.add("hidden"); }
     document.getElementById("detail").addEventListener("click", (e) => { if (e.target.id === "detail") closeDetail(); });
+    document.getElementById("d-print").addEventListener("click", () => current && App.printReceipt(current));
   </script>
 </body>
 </html>

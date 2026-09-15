@@ -9,6 +9,7 @@
   --primary-hover: #b93c0b;
   --primary-soft: #fdebe3;
   --success: #2b8a3e;
+  --warning: #b86e00;
   --danger: #c92a2a;
   --radius: 16px;
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.06);
@@ -25,6 +26,7 @@
     --primary-hover: #ff9463;
     --primary-soft: #3a2419;
     --success: #51cf66;
+    --warning: #ffb84d;
     --danger: #ff6b6b;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
   }
@@ -85,6 +87,7 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 }
 .badge-super { background: var(--primary-soft); color: var(--primary); }
 .badge-paid { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.badge-pending { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
 .badge-cancelled { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1.25rem; }
@@ -293,6 +296,39 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 .pay { text-align: center; }
 .qr-box { display: inline-block; padding: 12px; background: #fff; border-radius: 12px; margin: 1rem 0; border: 1px solid var(--border); }
 .pay-amount { font-size: 2rem; font-weight: 800; }
+
+/* ---------- Payment method / bill saved ---------- */
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 1rem 0; }
+.seg button { padding: .7rem .5rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.seg button:hover { border-color: var(--primary); }
+.seg button[aria-checked="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+.done-icon { width: 64px; height: 64px; margin: .5rem auto 1rem; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; font-weight: 800; background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.done-icon.pending { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.done-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: 1rem; }
+.done-actions .btn-block { grid-column: 1 / -1; }
+
+/* ---------- Awaiting payment (dashboard) ---------- */
+.section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 2rem 0 .75rem; }
+.section-head h2 { margin: 0; font-size: 1.2rem; }
+.pending-list { display: grid; gap: .6rem; }
+.pending-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .8rem 1rem; }
+.pending-row .grow { flex: 1; min-width: 10rem; }
+.pending-row .amt { font-weight: 800; }
+
+/* ---------- Receipt (print only, 58mm) ---------- */
+#receipt-print { display: none; }
+@media print {
+  @page { margin: 0; }
+  body { background: #fff !important; min-height: 0; }
+  body > *:not(#receipt-print) { display: none !important; }
+  #receipt-print { display: block; width: 58mm; padding: 2mm 3mm; color: #000; font: 11px/1.35 "Courier New", monospace; }
+  #receipt-print hr { border: 0; border-top: 1px dashed #000; margin: 1.5mm 0; }
+  #receipt-print .rc-center { text-align: center; }
+  #receipt-print .rc-shop { font-size: 14px; font-weight: 700; }
+  #receipt-print .rc-row { display: flex; justify-content: space-between; gap: 2mm; }
+  #receipt-print .rc-item { font-weight: 700; }
+  #receipt-print .rc-total { font-size: 13px; font-weight: 700; }
+}
 
 /* ---------- Tables ---------- */
 .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 1rem; }

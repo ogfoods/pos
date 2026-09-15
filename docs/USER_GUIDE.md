@@ -43,6 +43,7 @@ If nothing appears, check that the number matches the one given at billing.
 3. Click **Login**.
 
 - Wrong details show **"Invalid username or password."**
+- After **5 wrong passwords in 15 minutes** the account is locked for up to 15 minutes, and the message says how long to wait. A successful login resets the count. Too many failures from one network (20 in 15 minutes) also blocks logins from it for a while.
 - A login lasts **12 hours**. After that you are sent back to the login page automatically.
 - If you are already logged in, opening the login page takes you straight to the dashboard.
 - Click **Logout** (top-right on any admin page) when you finish, especially on a shared device.
@@ -89,10 +90,22 @@ If the list is empty, a super admin needs to add menu items first.
 
 ### Step 3 — Payment
 1. Check the customer, item list and **total amount**.
-2. The customer scans the **QR code** with any UPI app (GPay, PhonePe, Paytm, etc.). The amount is pre-filled.
-3. After payment is received, click **Done**.
+2. Pick the payment method: **Cash**, **UPI** or **Card**.
+   - **Cash / Card** — collect the money, then click **Save bill**. The bill is saved as **paid**.
+   - **UPI** — the customer scans the **QR code** with any UPI app (GPay, PhonePe, Paytm, etc.; amount pre-filled). Click **Save bill**. The bill is saved as **pending**.
+3. The saved screen shows the order number and status:
+   - For UPI, keep the QR on screen. When the payment shows in your UPI app, click **✓ Payment received** to mark it **paid**.
+   - **🖨️ Print receipt** prints a 58 mm receipt.
+   - **WhatsApp** opens WhatsApp with the bill summary addressed to the customer's number.
+4. Click **New bill** for the next customer, or close the window.
 
-A message such as **"Order #12 saved · ₹240.00"** confirms the bill. The order is saved under the customer's phone number and appears in their history immediately.
+The order is saved under the customer's phone number and appears in their history immediately.
+
+### Awaiting payment
+UPI bills not yet confirmed appear under **Awaiting payment** on the dashboard (refreshes every minute). Click **✓ Received** once the money arrives, or **Receipt** to print. Any admin can confirm payments.
+
+### Printing receipts
+The receipt is laid out for 58 mm thermal paper. In the print dialog choose your receipt printer, set margins to **None**, and turn off headers/footers. On Android with a Bluetooth printer, use a print service app (e.g. RawBT) so it appears in the print dialog.
 
 > The QR currently uses the sample UPI ID from `js/config.js`. Replace `UPI_ID` with your real UPI ID before accepting payments.
 
@@ -108,13 +121,13 @@ A message such as **"Order #12 saved · ₹240.00"** confirms the bill. The orde
 
 **Where:** Dashboard → **Manage bills** (`managebills.html`)
 
-The table lists all orders, newest first, 25 per page, with order number, date, customer name and phone, number of items, total, status, and who created the bill.
+The table lists all orders, newest first, 25 per page, with order number, date, customer name and phone, number of items, total, payment method, status, and who created the bill.
 
 | Task | How |
 |---|---|
 | **Search** | Type a phone number (or part of one), a customer name, or an exact order number. Results update as you type. |
 | **Change pages** | Use **← Prev** / **Next →** below the table. |
-| **View details** | Click **View** to see the full item list and total. |
+| **View details** | Click **View** to see the full item list, total, payment method and status. **🖨️ Print receipt** or **WhatsApp** the bill from there. |
 | **Change status** | Pick **paid**, **pending** or **cancelled** from the status dropdown. It saves immediately. |
 | **Delete a bill** | Click **Delete** and confirm. This permanently removes the order and cannot be undone. |
 
@@ -228,6 +241,7 @@ Edit `js/config.js`, then commit and push:
 | `SHOP_NAME` | `"OG Foods"` | Header title and UPI payee name |
 | `CURRENCY` | `"₹"` | Symbol shown before amounts |
 | `UPI_ID` | `"ogfoods@okaxis"` | Where QR payments are sent |
+| `COUNTRY_CODE` | `"91"` | Added before the customer's number in WhatsApp receipt links |
 
 GitHub Pages updates in a minute or two. Hard-refresh (Ctrl+Shift+R) to see changes.
 

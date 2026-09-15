@@ -9,4 +9,6 @@ window.APP_CONFIG = {
   CURRENCY: "₹",
   // Sample UPI payee used for the payment QR. Replace with the real one.
   UPI_ID: "sample@upi",
+  // Prefix added to 10-digit phone numbers for WhatsApp receipt links.
+  COUNTRY_CODE: "91",
 };

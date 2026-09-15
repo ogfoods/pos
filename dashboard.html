@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=5" />
+  <link rel="stylesheet" href="css/style.css?v=6" />
 </head>
 <body>
   <header class="topbar">
@@ -52,6 +52,15 @@
         </div>
       </a>
     </div>
+
+    <!-- UPI bills saved as pending until payment is confirmed -->
+    <section class="hidden" id="pending">
+      <div class="section-head">
+        <h2>Awaiting payment <span class="badge badge-pending" id="pending-count">0</span></h2>
+        <button class="btn btn-ghost btn-sm" type="button" id="pending-refresh">Refresh</button>
+      </div>
+      <div class="pending-list" id="pending-list"></div>
+    </section>
   </main>
 
   <!-- New bill modal -->
@@ -99,9 +108,30 @@
           <h3 class="step-title">Payment</h3>
           <p class="muted" id="pay-for"></p>
           <div class="pay-amount" id="pay-amount"></div>
-          <div class="qr-box"><div id="qr"></div></div>
-          <p class="muted" style="font-size:.85rem">Sample QR — scan with any UPI app.</p>
+          <div class="seg" id="pay-method" role="radiogroup" aria-label="Payment method">
+            <button type="button" role="radio" data-method="cash">💵 Cash</button>
+            <button type="button" role="radio" data-method="upi">📱 UPI</button>
+            <button type="button" role="radio" data-method="card">💳 Card</button>
+          </div>
+          <div id="upi-box" class="hidden">
+            <div class="qr-box"><div id="qr"></div></div>
+            <p class="muted" style="font-size:.85rem">Scan with any UPI app. The bill is saved as <strong>pending</strong> until you confirm the payment.</p>
+          </div>
           <ul class="order-items" id="pay-items" style="text-align:left"></ul>
+        </section>
+
+        <!-- Saved -->
+        <section data-step="3" class="hidden pay">
+          <div class="done-icon" id="done-icon" aria-hidden="true">✓</div>
+          <h3 id="done-title">Order saved</h3>
+          <p class="muted" id="done-sub"></p>
+          <div class="pay-amount" id="done-amount"></div>
+          <div id="done-qr-wrap" class="hidden"><div class="qr-box"><div id="done-qr"></div></div></div>
+          <div class="done-actions">
+            <button class="btn btn-block" type="button" id="done-paid">✓ Payment received</button>
+            <button class="btn btn-ghost" type="button" id="done-print">🖨️ Print receipt</button>
+            <a class="btn btn-ghost" id="done-wa" target="_blank" rel="noopener">WhatsApp</a>
+          </div>
         </section>
       </div>
 
@@ -131,15 +161,18 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=5"></script>
-  <script src="js/common.js?v=5"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/common.js?v=6"></script>
   <script>
-    const { rpc, money, esc, digits, toast, renderItems, cfg } = App;
+    const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
     let menu = [];
     const cart = new Map(); // menu_item_id -> qty
     let step = 0;
     let activeCat = "All";
+    let payMethod = "cash";
+    let saved = null; // order returned by create_order
+    let pending = [];
     const ARROW = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>`;
 
     (async () => {
@@ -158,10 +191,59 @@
             c.addEventListener("click", () => toast("Only super admin can access this.", "error"));
           });
         }
+        loadPending();
+        setInterval(() => { if (!document.hidden) loadPending(); }, 60000);
       } catch (err) {
         toast(err.message, "error");
       }
     })();
+
+    // ---------- Awaiting payment ----------
+    async function loadPending() {
+      try {
+        pending = await rpc("list_pending_orders", { p_token: me.token });
+        renderPending();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    function renderPending() {
+      document.getElementById("pending").classList.toggle("hidden", !pending.length);
+      document.getElementById("pending-count").textContent = pending.length;
+      document.getElementById("pending-list").innerHTML = pending
+        .map(
+          (o) => `<div class="card pending-row">
+            <div class="grow">
+              <strong>#${o.id}</strong> · ${esc(o.customer_name || "Customer")}
+              <div class="muted">${esc(o.phone)} · ${fmtDate(o.created_at)} · ${methodLabel(o.payment_method)}</div>
+            </div>
+            <span class="amt">${money(o.total)}</span>
+            <div class="row-actions">
+              <button class="btn btn-sm" type="button" data-paid="${o.id}">✓ Received</button>
+              <button class="btn btn-ghost btn-sm" type="button" data-receipt="${o.id}">Receipt</button>
+            </div>
+          </div>`
+        )
+        .join("");
+    }
+
+    document.getElementById("pending-refresh").addEventListener("click", loadPending);
+    document.getElementById("pending-list").addEventListener("click", async (e) => {
+      const paid = e.target.closest("[data-paid]");
+      const receipt = e.target.closest("[data-receipt]");
+      if (receipt) return App.printReceipt(pending.find((o) => o.id === Number(receipt.dataset.receipt)));
+      if (!paid) return;
+      paid.disabled = true;
+      try {
+        const o = await rpc("mark_order_paid", { p_token: me.token, p_id: Number(paid.dataset.paid) });
+        toast(`Order #${o.id} marked paid`, "success");
+        loadPending();
+      } catch (err) {
+        toast(err.message, "error");
+        paid.disabled = false;
+      }
+    });
 
     // ---------- Modal ----------
     const modal = document.getElementById("bill-modal");
@@ -186,10 +268,12 @@
 
     function openBill() {
       cart.clear();
+      saved = null;
       phoneIn.value = "";
       nameIn.value = "";
       document.getElementById("item-filter").value = "";
       activeCat = "All";
+      payMethod = "cash";
       showStep(0);
       modal.classList.remove("hidden");
       document.body.style.overflow = "hidden";
@@ -211,9 +295,9 @@
         if (i === n) li.setAttribute("aria-current", "step");
         else li.removeAttribute("aria-current");
       });
-      backBtn.parentElement.style.visibility = n === 0 ? "hidden" : "visible";
-      document.getElementById("cart-summary").classList.toggle("hidden", n === 0);
-      nextBtn.innerHTML = n === 2 ? "Done" : `Next ${ARROW}`;
+      backBtn.parentElement.style.visibility = n === 0 || n === 3 ? "hidden" : "visible";
+      document.getElementById("cart-summary").classList.toggle("hidden", n === 0 || n === 3);
+      nextBtn.innerHTML = n === 2 ? "Save bill" : n === 3 ? "New bill" : `Next ${ARROW}`;
       nextBtn.disabled = false;
       modal.querySelector(".modal-body").scrollTop = 0;
     }
@@ -234,8 +318,10 @@
         if (!cart.size) return toast("Select at least one item.", "error");
         renderPayment();
         showStep(2);
-      } else {
+      } else if (step === 2) {
         await submitOrder();
+      } else {
+        openBill();
       }
     });
 
@@ -326,52 +412,98 @@
       });
     }
 
+    const cartTotal = () => cartLines().reduce((s, l) => s + l.price * l.qty, 0);
+
     function updateCartTotal() {
       const lines = cartLines();
       const count = lines.reduce((s, l) => s + l.qty, 0);
       document.getElementById("item-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
       document.getElementById("cart-badge").textContent = count;
-      document.getElementById("cart-total").textContent = money(lines.reduce((s, l) => s + l.price * l.qty, 0));
+      document.getElementById("cart-total").textContent = money(cartTotal());
     }
 
     // ---------- Step 3: payment ----------
     function renderPayment() {
-      const lines = cartLines();
-      const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+      const total = cartTotal();
       document.getElementById("pay-for").textContent = `${nameIn.value.trim() || "Customer"} · ${phoneIn.value}`;
       document.getElementById("pay-amount").textContent = money(total);
       document.getElementById("pay-items").innerHTML =
-        renderItems(lines) + `<li><strong>Total</strong><strong>${money(total)}</strong></li>`;
-
-      const qr = document.getElementById("qr");
-      qr.innerHTML = "";
-      const upi = `upi://pay?pa=${encodeURIComponent(cfg.UPI_ID)}&pn=${encodeURIComponent(cfg.SHOP_NAME)}&am=${total.toFixed(2)}&cu=INR`;
-      if (window.QRCode) {
-        new QRCode(qr, { text: upi, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
-      } else {
-        qr.textContent = "QR unavailable";
-      }
+        renderItems(cartLines()) + `<li><strong>Total</strong><strong>${money(total)}</strong></li>`;
+      setMethod(payMethod);
     }
+
+    function setMethod(m) {
+      payMethod = m;
+      document.querySelectorAll("#pay-method [data-method]").forEach((b) =>
+        b.setAttribute("aria-checked", String(b.dataset.method === m))
+      );
+      const upi = m === "upi";
+      document.getElementById("upi-box").classList.toggle("hidden", !upi);
+      if (upi) App.renderQR(document.getElementById("qr"), cartTotal());
+    }
+
+    document.getElementById("pay-method").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-method]");
+      if (b) setMethod(b.dataset.method);
+    });
 
     async function submitOrder() {
       nextBtn.disabled = true;
       nextBtn.textContent = "Saving…";
       try {
-        const res = await rpc("create_order", {
+        saved = await rpc("create_order", {
           p_token: me.token,
           p_phone: phoneIn.value,
           p_customer_name: nameIn.value.trim() || null,
           p_items: [...cart].map(([menu_item_id, qty]) => ({ menu_item_id, qty })),
+          p_payment_method: payMethod,
         });
         cart.clear();
-        closeBill();
-        toast(`Order #${res.id} saved · ${money(res.total)}`, "success");
+        renderSaved();
+        showStep(3);
+        toast(`Order #${saved.id} saved · ${money(saved.total)}`, "success");
+        if (saved.payment_status === "pending") loadPending();
       } catch (err) {
         toast(err.message, "error");
         nextBtn.disabled = false;
-        nextBtn.textContent = "Done";
+        nextBtn.textContent = "Save bill";
       }
     }
+
+    // ---------- Saved ----------
+    function renderSaved() {
+      const o = saved;
+      const isPending = o.payment_status === "pending";
+      const icon = document.getElementById("done-icon");
+      icon.classList.toggle("pending", isPending);
+      icon.textContent = isPending ? "⏳" : "✓";
+      document.getElementById("done-title").textContent = isPending
+        ? `Order #${o.id} · awaiting payment`
+        : `Order #${o.id} · paid`;
+      document.getElementById("done-sub").textContent =
+        `${methodLabel(o.payment_method)} · ${o.customer_name || "Customer"} · ${o.phone}`;
+      document.getElementById("done-amount").textContent = money(o.total);
+      document.getElementById("done-paid").classList.toggle("hidden", !isPending);
+      document.getElementById("done-qr-wrap").classList.toggle("hidden", !isPending);
+      if (isPending) App.renderQR(document.getElementById("done-qr"), o.total);
+      document.getElementById("done-wa").href = App.whatsappUrl(o);
+    }
+
+    document.getElementById("done-print").addEventListener("click", () => saved && App.printReceipt(saved));
+    document.getElementById("done-paid").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        saved = await rpc("mark_order_paid", { p_token: me.token, p_id: saved.id });
+        renderSaved();
+        toast(`Order #${saved.id} marked paid`, "success");
+        loadPending();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
   </script>
 </body>
 </html>

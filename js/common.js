@@ -95,7 +95,75 @@
       .join("");
   }
 
+  const METHOD_LABELS = { cash: "Cash", upi: "UPI", card: "Card" };
+  const methodLabel = (m) => METHOD_LABELS[m] || "—";
+
+  // UPI deep link encoded in the payment QR.
+  const upiLink = (amount) =>
+    `upi://pay?pa=${encodeURIComponent(cfg.UPI_ID)}&pn=${encodeURIComponent(cfg.SHOP_NAME)}&am=${Number(amount).toFixed(2)}&cu=INR`;
+
+  function renderQR(el, amount) {
+    el.innerHTML = "";
+    if (window.QRCode) new QRCode(el, { text: upiLink(amount), width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+    else el.textContent = "QR unavailable";
+  }
+
+  // Receipt sized for a 58mm thermal printer. `o` is an order from create_order / get_order.
+  function receiptHtml(o) {
+    const items = (o.items || [])
+      .map(
+        (i) => `<div class="rc-item">${esc(i.name)}</div>
+          <div class="rc-row"><span>${i.qty} × ${money(i.price)}</span><span>${money(i.price * i.qty)}</span></div>`
+      )
+      .join("");
+    return `
+      <div class="rc-center rc-shop">${esc(cfg.SHOP_NAME)}</div>
+      <div class="rc-center">Order #${o.id}</div>
+      <div class="rc-center">${fmtDate(o.created_at)}</div>
+      <hr>
+      <div>${esc(o.customer_name || "Customer")} · ${esc(o.phone || "")}</div>
+      <hr>
+      ${items}
+      <hr>
+      <div class="rc-row rc-total"><span>TOTAL</span><span>${money(o.total)}</span></div>
+      <div class="rc-row"><span>Payment</span><span>${methodLabel(o.payment_method)} · ${esc(String(o.payment_status).toUpperCase())}</span></div>
+      <hr>
+      <div class="rc-center">Thank you! Visit again.</div>`;
+  }
+
+  function printReceipt(o) {
+    let box = document.getElementById("receipt-print");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "receipt-print";
+      document.body.appendChild(box);
+    }
+    box.innerHTML = receiptHtml(o);
+    window.print();
+  }
+
+  // wa.me link with the bill summary, addressed to the customer's phone.
+  function whatsappUrl(o) {
+    const lines = [
+      `*${cfg.SHOP_NAME}*`,
+      `Order #${o.id} · ${fmtDate(o.created_at)}`,
+      "",
+      ...(o.items || []).map((i) => `${i.qty} × ${i.name} — ${money(i.price * i.qty)}`),
+      "",
+      `*Total: ${money(o.total)}*`,
+      `Payment: ${methodLabel(o.payment_method)} (${o.payment_status})`,
+      "",
+      "Thank you!",
+    ];
+    const phone = digits(o.phone);
+    const to = phone.length === 10 ? (cfg.COUNTRY_CODE || "91") + phone : phone;
+    return `https://wa.me/${to}?text=${encodeURIComponent(lines.join("\n"))}`;
+  }
+
   document.querySelectorAll("[data-shop-name]").forEach((el) => (el.textContent = cfg.SHOP_NAME));
 
-  window.App = { cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems };
+  window.App = {
+    cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems,
+    methodLabel, renderQR, printReceipt, whatsappUrl,
+  };
 })();

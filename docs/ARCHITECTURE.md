@@ -68,6 +68,10 @@ Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `c
 | `money`, `fmtDate`, `esc`, `digits` | Formatting, HTML escaping, phone normalisation |
 | `toast(msg, type)` | Small notification popup |
 | `renderItems(items)` | Renders order line items as a list |
+| `methodLabel(m)` | `cash`/`upi`/`card` → display label |
+| `renderQR(el, amount)` | Draws the UPI payment QR for an amount |
+| `printReceipt(order)` | Fills a hidden `#receipt-print` block (58 mm layout, print-only CSS) and opens the print dialog |
+| `whatsappUrl(order)` | `wa.me` link with the bill summary; prefixes `COUNTRY_CODE` to 10-digit phones |
 
 ## Database design
 
@@ -113,6 +117,8 @@ erDiagram
         text customer_name
         numeric total
         text payment_status "paid | pending | cancelled"
+        text payment_method "cash | upi | card"
+        timestamptz paid_at
         bigint created_by FK
     }
     order_items {
@@ -149,11 +155,12 @@ The Supabase publishable (anon) key is public by design — it is in `config.js`
 
 1. **RLS on, no policies.** Every table has Row Level Security enabled with zero policies, so the anon key cannot `select`, `insert`, `update` or `delete` any table directly.
 2. **Access only through functions.** Functions are `SECURITY DEFINER`: they run as the owner and can touch tables, but only in the ways they are written to. `execute` is granted to `anon` only for the intended functions; the internal `_require_admin` helper is not callable from outside.
-3. **Hashed passwords.** `admins.password_hash` uses bcrypt via `pgcrypto` (`crypt()` + `gen_salt('bf')`). Passwords never leave the database and are never returned to the browser.
-4. **Session tokens.** `admin_login` returns a random UUID token valid for 12 hours, stored in `admin_sessions`. Every admin function receives `p_token` and calls `_require_admin(token, super_required)`.
-5. **Roles enforced server-side.** Hiding cards in the UI is cosmetic; super-only functions raise `Super admin access required.` for a normal admin even if called directly.
-6. **Server-side totals.** `create_order` receives only menu item IDs and quantities. Prices come from `menu_items`, and only active items are accepted.
-7. **XSS protection.** All user-supplied text is passed through `App.esc()` before being inserted into HTML.
+3. **Hashed passwords.** `admins.password_hash` uses bcrypt via `pgcrypto` (`crypt()` + `gen_salt('bf')`). Passwords never leave the database and are never returned to the browser. Empty or null passwords are always rejected.
+4. **Login rate limit.** `admin_login` records every attempt in `login_attempts` (username, client IP from `x-forwarded-for`). 5 failures per username (reset by a success) or 20 per IP within 15 minutes block further attempts. Rows older than a day are purged on each login. Trade-off: someone who knows a username can keep it locked; the IP limit and the short window keep that small.
+5. **Session tokens.** `admin_login` returns a random UUID token valid for 12 hours, stored in `admin_sessions`. Every admin function receives `p_token` and calls `_require_admin(token, super_required)`.
+6. **Roles enforced server-side.** Hiding cards in the UI is cosmetic; super-only functions raise `Super admin access required.` for a normal admin even if called directly.
+7. **Server-side totals.** `create_order` receives only menu item IDs and quantities. Prices come from `menu_items`, and only active items are accepted.
+8. **XSS protection.** All user-supplied text is passed through `App.esc()` before being inserted into HTML.
 
 Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone number can see that customer's history (capped at 100 orders, minimum 6 digits). Add OTP verification if this is a concern.
 
@@ -161,12 +168,15 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 
 | Function | Access | Description |
 |---|---|---|
-| `admin_login(p_username, p_password)` | Public | Verifies credentials, returns `{token, username, role, expires_at}` and clears expired sessions |
+| `admin_login(p_username, p_password)` | Public | Rate-limited (5 failures per username or 20 per IP in 15 min). Returns `{token, username, role, expires_at}` or `{error}` (errors are returned, not raised, so failed attempts are recorded) |
 | `admin_logout(p_token)` | Public | Deletes the session |
 | `admin_me(p_token)` | Any admin | Returns `{username, role}`; used as a page guard |
 | `get_orders_by_phone(p_phone)` | Public | Customer order history with items, newest first |
 | `list_menu(p_token, p_include_inactive)` | Any admin (active items); super admin (with hidden items) | Menu sorted by category and name |
-| `create_order(p_token, p_phone, p_customer_name, p_items)` | Any admin | Upserts the customer, creates the order and items, computes the total |
+| `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method)` | Any admin | Upserts the customer, creates the order and items, computes the total. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
+| `mark_order_paid(p_token, p_id, p_method?)` | Any admin | `pending` → `paid`, sets `paid_at`; no-op if already paid |
+| `list_pending_orders(p_token)` | Any admin | Orders awaiting payment, newest first (max 50) |
+| `get_order(p_token, p_id)` | Any admin | One order with items, method, status, creator |
 | `upsert_menu_item(p_token, p_id, p_name, p_category, p_price, p_is_active, p_image_url)` | Super admin | Inserts when `p_id` is null, otherwise updates; image URL must be http(s) |
 | `delete_menu_item(p_token, p_id)` | Super admin | Deletes a menu item (and its recipe) |
 | `list_ingredients(p_token)` | Super admin | Ingredients with `used_count` |
@@ -248,11 +258,9 @@ Schema changes: update `schema.sql` (for fresh installs) and add a numbered file
 | `SHOP_NAME` | Shown in the header and as the UPI payee name |
 | `CURRENCY` | Currency symbol used for display |
 | `UPI_ID` | Payee address encoded in the payment QR |
+| `COUNTRY_CODE` | Prefix for 10-digit phone numbers in WhatsApp receipt links (default `91`) |
 
 ## Possible future improvements
 
 - OTP verification for customer order lookup.
-- Mark orders `pending` until payment is confirmed instead of defaulting to `paid`.
-- Printable / shareable receipts.
 - Sales reports (daily totals, top items).
-- Rate limiting on `admin_login` to slow down password guessing.
