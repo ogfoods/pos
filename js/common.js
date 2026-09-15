@@ -50,6 +50,7 @@
   function applySettings(s) {
     if (s) {
       Object.assign(cfg, {
+        SETTINGS: s,
         SHOP_NAME: s.shop_name || FALLBACK.SHOP_NAME,
         CURRENCY: s.currency || FALLBACK.CURRENCY,
         UPI_ID: s.upi_id || FALLBACK.UPI_ID,
@@ -248,6 +249,6 @@
   window.App = {
     cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems,
     methodLabel, renderQR, printReceipt, whatsappUrl, applySettings, upiConfigured,
-    printHtml, printShiftReport, cashDiff,
+    printHtml, printShiftReport, cashDiff, settingsReady,
   };
 })();

@@ -8,7 +8,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 
 | Page | Who | What |
 |---|---|---|
-| `index.html` | Public | Search order history by phone number |
+| `index.html` | Public | Home page: open status, live kitchen board, favourites, menu with WhatsApp basket, visit info, order lookup by phone |
 | `adminlogin.html` | Admins | Username / password login |
 | `dashboard.html` | All admins | Cash shift open/close, bento dashboard, awaiting-payment list, **New bill** modal (customer → items → Cash/UPI/Card → receipt) |
 | `managebills.html` | Super admin | Search, view, change status, delete orders, print/WhatsApp receipts |
@@ -34,7 +34,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
    ```
    Add everyone else from the **Staff** page after logging in. Passwords are bcrypt hashes; in SQL always use `crypt(...)`.
 4. Project Settings → API → copy **Project URL** and **anon public key** into `js/config.js`.
-5. Log in → **Shop settings** → set shop name, UPI ID, address and receipt footer.
+5. Log in → **Shop settings** → set shop name, UPI ID, address, receipt footer, and the **Home page** details (tagline, WhatsApp, Maps link, cover photo, opening hours).
 
 Existing database? Run the new files in `supabase/migrations/` in order instead of `schema.sql`.
 

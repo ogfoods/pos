@@ -3,41 +3,465 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Order History</title>
-  <link rel="stylesheet" href="css/style.css?v=10" />
+  <title>Live kitchen &amp; menu</title>
+  <meta name="description" content="See what is cooking right now, browse the menu and order on WhatsApp." />
+  <link rel="stylesheet" href="css/style.css?v=11" />
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="index.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <nav class="ld-nav" aria-label="Sections">
+      <a href="#kitchen">Live kitchen</a>
+      <a href="#menu">Menu</a>
+      <a href="#visit">Visit us</a>
+      <a href="#orders">My orders</a>
+    </nav>
     <div class="topbar-right">
-      <a class="btn" href="adminlogin.html">Login</a>
+      <a class="btn btn-ghost btn-sm" href="#orders">Track order</a>
+      <a class="btn btn-sm" href="adminlogin.html">Staff login</a>
     </div>
   </header>
 
-  <main class="container">
-    <section class="hero">
-      <h1>Find your orders</h1>
-      <p class="muted">Enter the phone number you used while billing to see your order history.</p>
-      <form class="search" id="search-form" autocomplete="off">
-        <input class="input" id="phone" type="tel" inputmode="numeric" placeholder="Search by phone number" required />
-        <button class="btn" type="submit">Search</button>
-      </form>
+  <main>
+    <!-- Hero -->
+    <section class="ld-hero" id="hero">
+      <div class="ld-hero-inner">
+        <span class="ld-open hidden" id="open-pill"><span class="dot" aria-hidden="true"></span><span id="open-text"></span></span>
+        <h1 data-shop-name>Shop</h1>
+        <p class="ld-tagline" id="tagline">Fresh food, made to order while you watch.</p>
+        <div class="ld-cta">
+          <a class="btn btn-wa hidden" id="cta-wa" target="_blank" rel="noopener">💬 Order on WhatsApp</a>
+          <a class="btn btn-light" href="#menu">🍽️ See menu</a>
+          <a class="btn btn-glass hidden" id="cta-call">📞 Call</a>
+          <a class="btn btn-glass hidden" id="cta-map" target="_blank" rel="noopener">📍 Directions</a>
+        </div>
+      </div>
     </section>
 
-    <section class="results" id="results" aria-live="polite"></section>
+    <!-- Live numbers -->
+    <div class="ld-stats" aria-live="polite">
+      <div class="ld-stat"><span class="ico" aria-hidden="true">🔥</span><div><div class="num" id="st-cooking">–</div><div class="lbl">cooking now</div></div></div>
+      <div class="ld-stat"><span class="ico" aria-hidden="true">✅</span><div><div class="num" id="st-ready">–</div><div class="lbl">ready for pickup</div></div></div>
+      <div class="ld-stat"><span class="ico" aria-hidden="true">🧾</span><div><div class="num" id="st-today">–</div><div class="lbl">orders today</div></div></div>
+    </div>
+
+    <!-- Live kitchen board -->
+    <section class="ld-section reveal" id="kitchen">
+      <header>
+        <div>
+          <div class="ld-eyebrow">Right now</div>
+          <h2>Live from our kitchen</h2>
+        </div>
+        <span class="ld-live"><span class="dot" aria-hidden="true"></span>LIVE</span>
+      </header>
+      <div class="ld-ticker" id="ticker" aria-live="polite"><span>Firing up the stove…</span></div>
+      <div class="ld-board">
+        <div class="ld-lane"><h3><span>🧾 Order received</span><span class="badge" id="n-queued">0</span></h3><div id="lane-queued"></div></div>
+        <div class="ld-lane"><h3><span>🔥 Preparing</span><span class="badge" id="n-preparing">0</span></h3><div id="lane-preparing"></div></div>
+        <div class="ld-lane ready"><h3><span>✅ Ready</span><span class="badge" id="n-ready">0</span></h3><div id="lane-ready"></div></div>
+      </div>
+      <p class="ld-board-note">Find your order number on your bill. This board updates by itself.</p>
+    </section>
+
+    <!-- Favourites -->
+    <section class="ld-section reveal hidden" id="favs-section">
+      <header>
+        <div>
+          <div class="ld-eyebrow">Loved this week</div>
+          <h2>Today's favourites</h2>
+        </div>
+      </header>
+      <div class="ld-favs" id="favs"></div>
+    </section>
+
+    <!-- Menu -->
+    <section class="ld-section reveal" id="menu">
+      <header>
+        <div>
+          <div class="ld-eyebrow">Fresh every day</div>
+          <h2>Our menu</h2>
+        </div>
+      </header>
+      <div class="ld-menu-tools">
+        <input class="input" id="menu-q" type="search" placeholder="Search dishes…" aria-label="Search menu" />
+        <div class="chips-row" id="menu-cats" role="group" aria-label="Categories" style="margin:0"></div>
+      </div>
+      <div class="ld-menu" id="menu-grid"><div class="empty">Loading menu…</div></div>
+    </section>
+
+    <!-- Visit -->
+    <section class="ld-section reveal" id="visit">
+      <header>
+        <div>
+          <div class="ld-eyebrow">Come say hi</div>
+          <h2>Visit us</h2>
+        </div>
+      </header>
+      <div class="ld-visit">
+        <div class="card">
+          <h3 data-shop-name>Shop</h3>
+          <p class="muted" id="v-address"></p>
+          <p id="v-phone"></p>
+          <div class="ld-cta" id="v-cta"></div>
+        </div>
+        <div class="card hidden" id="hours-card">
+          <h3>Opening hours</h3>
+          <table class="ld-hours"><tbody id="hours"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Order history -->
+    <section class="ld-section reveal" id="orders">
+      <header>
+        <div>
+          <div class="ld-eyebrow">Already ordered?</div>
+          <h2>Your orders</h2>
+        </div>
+      </header>
+      <form class="search" id="search-form" autocomplete="off" style="margin:0 0 1rem;max-width:560px">
+        <input class="input" id="phone" type="tel" inputmode="numeric" placeholder="Enter the phone number used at billing" aria-label="Phone number" required />
+        <button class="btn" type="submit">Search</button>
+      </form>
+      <div class="results" id="results" aria-live="polite" style="margin:0"></div>
+    </section>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=10"></script>
-  <script src="js/common.js?v=10"></script>
-  <script>
-    const { rpc, money, fmtDate, esc, digits, renderItems } = App;
-    const form = document.getElementById("search-form");
-    const results = document.getElementById("results");
+  <!-- WhatsApp basket -->
+  <div class="ld-basket hidden" id="basket" role="region" aria-label="Your WhatsApp order">
+    <span aria-hidden="true">🛒</span>
+    <span class="grow" id="basket-text"></span>
+    <a class="btn btn-wa btn-sm" id="basket-wa" target="_blank" rel="noopener">Order on WhatsApp</a>
+    <button class="icon-btn" type="button" id="basket-clear" aria-label="Clear order">×</button>
+  </div>
 
+  <footer class="ld-footer">
+    © <span id="year"></span> <span data-shop-name>Shop</span> · <a href="adminlogin.html">Staff login</a>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=11"></script>
+  <script src="js/common.js?v=11"></script>
+  <script>
+    document.documentElement.classList.add("js");
+    const { rpc, money, fmtDate, esc, digits, renderItems, cfg } = App;
+    const $ = (id) => document.getElementById(id);
+    const TZ = "Asia/Kolkata";
+    const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const DAY_LABEL = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let settings = {};
+    let menuData = { items: [], favourites: [] };
+    let board = null;
+    let clockOffset = 0;
+    let activeCat = "All";
+    let boardTimer = null;
+    const seenTickets = new Set();
+    const basket = new Map(); // menu item id -> qty
+
+    $("year").textContent = new Date().getFullYear();
+
+    // Fade sections in as they scroll into view.
+    const io = "IntersectionObserver" in window
+      ? new IntersectionObserver((entries) => entries.forEach((e) => {
+          if (e.isIntersecting) { e.target.classList.add("shown"); io.unobserve(e.target); }
+        }), { threshold: 0.08 })
+      : null;
+    document.querySelectorAll(".reveal").forEach((el) => (io ? io.observe(el) : el.classList.add("shown")));
+
+    (async () => {
+      await App.settingsReady;
+      settings = cfg.SETTINGS || {};
+      renderShop();
+      loadMenu();
+      await loadBoard();
+      subscribe();
+      setInterval(() => { if (!document.hidden) loadBoard(); }, 15000);
+      setInterval(() => { renderOpen(); renderAges(); }, 60000);
+    })();
+
+    // ---------- Shop details ----------
+    const waNumber = () => {
+      const d = digits(settings.whatsapp);
+      if (!d) return "";
+      return d.length === 10 ? (cfg.COUNTRY_CODE || "91") + d : d;
+    };
+    const waLink = (text) => `https://wa.me/${waNumber()}?text=${encodeURIComponent(text)}`;
+    const show = (el, on) => el.classList.toggle("hidden", !on);
+
+    function renderShop() {
+      document.title = `${cfg.SHOP_NAME} · Live kitchen & menu`;
+      if (settings.tagline) $("tagline").textContent = settings.tagline;
+      if (settings.cover_image_url) {
+        $("hero").style.backgroundImage = `url("${encodeURI(settings.cover_image_url)}")`;
+      }
+      const wa = waNumber();
+      const phone = settings.shop_phone || "";
+      const tel = phone.replace(/[^\d+]/g, "");
+      if (wa) $("cta-wa").href = waLink(`Hi ${cfg.SHOP_NAME}, I'd like to place an order.`);
+      if (tel) $("cta-call").href = `tel:${tel}`;
+      if (settings.maps_url) $("cta-map").href = settings.maps_url;
+      show($("cta-wa"), wa);
+      show($("cta-call"), tel);
+      show($("cta-map"), settings.maps_url);
+
+      $("v-address").textContent = settings.shop_address || "";
+      $("v-phone").innerHTML = tel ? `📞 <a href="tel:${esc(tel)}">${esc(phone)}</a>` : "";
+      $("v-cta").innerHTML = [
+        settings.maps_url ? `<a class="btn" href="${esc(settings.maps_url)}" target="_blank" rel="noopener">📍 Get directions</a>` : "",
+        wa ? `<a class="btn btn-wa" href="${esc(waLink(`Hi ${cfg.SHOP_NAME}!`))}" target="_blank" rel="noopener">💬 WhatsApp us</a>` : "",
+      ].join("");
+      renderOpen();
+      renderHours();
+    }
+
+    // ---------- Opening hours (IST) ----------
+    function istNow() {
+      const parts = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+        .formatToParts(new Date(Date.now() + clockOffset));
+      const get = (t) => parts.find((p) => p.type === t).value;
+      return { day: get("weekday").toLowerCase().slice(0, 3), mins: Number(get("hour")) * 60 + Number(get("minute")) };
+    }
+    const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+    function fmtTime(t) {
+      const m = toMin(t), h = Math.floor(m / 60), mm = m % 60;
+      return `${h % 12 || 12}${mm ? ":" + String(mm).padStart(2, "0") : ""} ${h < 12 ? "am" : "pm"}`;
+    }
+    const isOpenDay = (e) => e && !e.closed && e.open && e.close;
+
+    function openState() {
+      const h = settings.opening_hours;
+      if (!h) return null;
+      const { day, mins } = istNow();
+      const idx = WEEK.indexOf(day);
+      const today = h[day];
+      const yday = h[WEEK[(idx + 6) % 7]];
+      // Still inside yesterday's after-midnight hours?
+      if (isOpenDay(yday) && toMin(yday.close) < toMin(yday.open) && mins < toMin(yday.close)) {
+        return { open: true, text: `Open now · closes ${fmtTime(yday.close)}` };
+      }
+      if (isOpenDay(today)) {
+        const o = toMin(today.open), c = toMin(today.close);
+        if (c > o ? mins >= o && mins < c : mins >= o) return { open: true, text: `Open now · closes ${fmtTime(today.close)}` };
+        if (mins < o) return { open: false, text: `Closed · opens ${fmtTime(today.open)} today` };
+      }
+      for (let i = 1; i <= 7; i++) {
+        const d = WEEK[(idx + i) % 7];
+        if (isOpenDay(h[d])) return { open: false, text: `Closed · opens ${fmtTime(h[d].open)} ${i === 1 ? "tomorrow" : DAY_LABEL[d]}` };
+      }
+      return { open: false, text: "Closed" };
+    }
+
+    function renderOpen() {
+      const st = openState();
+      show($("open-pill"), st);
+      if (!st) return;
+      $("open-pill").classList.toggle("closed", !st.open);
+      $("open-text").textContent = st.text;
+    }
+
+    function renderHours() {
+      const h = settings.opening_hours;
+      show($("hours-card"), h);
+      if (!h) return;
+      const today = istNow().day;
+      $("hours").innerHTML = WEEK.map(
+        (d) => `<tr class="${d === today ? "today" : ""}"><td>${DAY_LABEL[d]}${d === today ? " (today)" : ""}</td>
+          <td>${isOpenDay(h[d]) ? `${fmtTime(h[d].open)} – ${fmtTime(h[d].close)}` : "Closed"}</td></tr>`
+      ).join("");
+    }
+
+    // ---------- Live kitchen board ----------
+    const itemsText = (o) => (o.items || []).map((i) => `${i.qty}× ${i.name}`).join(", ");
+    const firstItem = (o) => (o.items && o.items[0] ? o.items[0].name : "an order");
+    const ageText = (iso) => {
+      const m = Math.max(0, Math.floor((Date.now() + clockOffset - Date.parse(iso)) / 60000));
+      return m < 1 ? "just now" : `${m} min ago`;
+    };
+    const ticketTime = (o) => (o.kitchen_status === "ready" ? o.kitchen_updated_at || o.created_at : o.created_at);
+
+    async function loadBoard() {
+      try {
+        const data = await rpc("public_kitchen");
+        clockOffset = Date.parse(data.server_time) - Date.now();
+        announce(board, data);
+        board = data;
+        renderBoard();
+      } catch {
+        if (!board) setTicker("Our live board is taking a short break. The menu and WhatsApp ordering still work.");
+      }
+    }
+    const scheduleBoard = () => { clearTimeout(boardTimer); boardTimer = setTimeout(loadBoard, 400); };
+
+    function subscribe() {
+      try {
+        App.db.channel("kitchen").on("broadcast", { event: "orders" }, scheduleBoard).subscribe();
+      } catch {}
+    }
+
+    function setTicker(text) {
+      $("ticker").innerHTML = `<span>${esc(text)}</span>`;
+    }
+
+    // One friendly line about the latest change on the board.
+    function announce(before, now) {
+      const ids = (list) => new Set((list || []).map((o) => o.id));
+      if (before) {
+        const readyNew = now.ready.find((o) => !ids(before.ready).has(o.id));
+        if (readyNew) return setTicker(`Order #${readyNew.id} is ready for pickup ✅`);
+        const cookingNew = now.preparing.find((o) => !ids(before.preparing).has(o.id));
+        if (cookingNew) return setTicker(`#${cookingNew.id} · ${firstItem(cookingNew)} just went on the stove 🔥`);
+        const queuedNew = now.queued.find((o) => !ids(before.queued).has(o.id));
+        if (queuedNew) return setTicker(`New order #${queuedNew.id} just came in 🧾`);
+        return;
+      }
+      const cooking = now.preparing[now.preparing.length - 1];
+      if (cooking) return setTicker(`#${cooking.id} · ${itemsText(cooking)} is being prepared right now 🔥`);
+      if (now.queued.length) return setTicker(`${now.queued.length} order${now.queued.length === 1 ? "" : "s"} just came in and will be on the stove soon 🧾`);
+      if (now.ready.length) return setTicker(`Order #${now.ready[0].id} is ready for pickup ✅`);
+      setTicker(now.orders_today
+        ? `${now.orders_today} order${now.orders_today === 1 ? "" : "s"} served up today. Yours could be next! 👩‍🍳`
+        : "The stove is hot and the kitchen is ready. Be our first order today! 👩‍🍳");
+    }
+
+    function ticket(o) {
+      const fresh = !seenTickets.has(`${o.id}:${o.kitchen_status}`);
+      seenTickets.add(`${o.id}:${o.kitchen_status}`);
+      return `<div class="ld-ticket ${fresh ? "new" : ""}" data-t="${esc(ticketTime(o))}">
+        <div class="top"><span>#${o.id}</span><span class="age">${ageText(ticketTime(o))}</span></div>
+        <div class="items">${esc(itemsText(o))}</div>
+      </div>`;
+    }
+
+    function renderBoard() {
+      const quiet = { queued: "No new orders this minute", preparing: "Nothing on the stove right now", ready: "Nothing waiting for pickup" };
+      ["queued", "preparing", "ready"].forEach((k) => {
+        const list = board[k] || [];
+        $(`n-${k}`).textContent = list.length;
+        $(`lane-${k}`).innerHTML = list.length ? list.map(ticket).join("") : `<div class="ld-quiet">${quiet[k]}</div>`;
+      });
+      countTo($("st-cooking"), board.queued.length + board.preparing.length);
+      countTo($("st-ready"), board.ready.length);
+      countTo($("st-today"), board.orders_today);
+    }
+
+    function renderAges() {
+      document.querySelectorAll(".ld-ticket[data-t]").forEach((el) => (el.querySelector(".age").textContent = ageText(el.dataset.t)));
+    }
+
+    function countTo(el, target) {
+      const from = Number(el.textContent) || 0;
+      if (reducedMotion || from === target) return (el.textContent = target);
+      const start = performance.now();
+      const step = (t) => {
+        const p = Math.min(1, (t - start) / 700);
+        el.textContent = Math.round(from + (target - from) * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+
+    // ---------- Menu, favourites and WhatsApp basket ----------
+    async function loadMenu() {
+      try {
+        menuData = await rpc("public_menu");
+      } catch {
+        $("menu-grid").innerHTML = `<div class="empty">Menu coming soon.</div>`;
+        return;
+      }
+      renderCats();
+      renderMenuAll();
+    }
+
+    const stockTag = (m) => (m.stock === "out" ? `<span class="ld-tag">Sold out</span>` : m.stock === "low" ? `<span class="ld-tag low">Few left</span>` : "");
+
+    function addButton(m) {
+      if (!waNumber()) return "";
+      if (m.stock === "out") return `<button class="ld-add" type="button" disabled>Sold out</button>`;
+      const q = basket.get(m.id) || 0;
+      return `<button class="ld-add ${q ? "in" : ""}" type="button" data-add="${m.id}" aria-label="Add ${esc(m.name)} to WhatsApp order">${q ? `✓ ${q} added` : "+ Add"}</button>`;
+    }
+
+    function card(m, tag) {
+      return `<article class="ld-card ${m.stock === "out" ? "sold-out" : ""}">
+        <div class="ld-img" aria-hidden="true">${esc(m.name.charAt(0).toUpperCase())}${m.image_url ? `<img src="${esc(m.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${tag}</div>
+        <div class="ld-body">
+          <div class="ld-name">${esc(m.name)}</div>
+          <div class="ld-cat">${esc(m.category)}</div>
+          <div class="ld-meta"><span class="ld-price">${money(m.price)}</span>${addButton(m)}</div>
+        </div>
+      </article>`;
+    }
+
+    function renderFavs() {
+      const favs = (menuData.favourites || []).map((id) => menuData.items.find((i) => i.id === id)).filter(Boolean);
+      show($("favs-section"), favs.length);
+      $("favs").innerHTML = favs
+        .map((m, i) => card(m, m.stock === "out" ? stockTag(m) : `<span class="ld-tag hot">${i === 0 ? "🔥 #1 this week" : "🔥 Popular"}</span>`))
+        .join("");
+    }
+
+    function renderCats() {
+      const cats = ["All", ...new Set(menuData.items.map((m) => m.category))];
+      $("menu-cats").innerHTML = cats.length > 2
+        ? cats.map((c) => `<button type="button" class="chip ${c === activeCat ? "active" : ""}" data-cat="${esc(c)}" aria-pressed="${c === activeCat}">${esc(c)}</button>`).join("")
+        : "";
+    }
+
+    function renderMenu() {
+      const q = $("menu-q").value.trim().toLowerCase();
+      const list = menuData.items.filter(
+        (m) => (activeCat === "All" || m.category === activeCat) && (!q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q))
+      );
+      $("menu-grid").innerHTML = menuData.items.length
+        ? list.length ? list.map((m) => card(m, stockTag(m))).join("") : `<div class="empty">No dishes match “${esc(q)}”.</div>`
+        : `<div class="empty">Menu coming soon.</div>`;
+    }
+
+    function renderBasket() {
+      const lines = [...basket].map(([id, qty]) => ({ m: menuData.items.find((i) => i.id === id), qty })).filter((l) => l.m);
+      show($("basket"), lines.length);
+      if (!lines.length) return;
+      const count = lines.reduce((s, l) => s + l.qty, 0);
+      const total = lines.reduce((s, l) => s + l.qty * Number(l.m.price), 0);
+      $("basket-text").textContent = `${count} item${count === 1 ? "" : "s"} · ${money(total)}`;
+      const text = [
+        `Hi ${cfg.SHOP_NAME}, I'd like to order:`,
+        ...lines.map((l) => `${l.qty}× ${l.m.name}`),
+        "",
+        `Approx. total: ${money(total)}`,
+        "Name: ",
+        "Pickup time: ",
+      ].join("\n");
+      $("basket-wa").href = waLink(text);
+    }
+
+    const renderMenuAll = () => { renderFavs(); renderMenu(); renderBasket(); };
+
+    $("menu-q").addEventListener("input", renderMenu);
+    $("menu-cats").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-cat]");
+      if (!chip) return;
+      activeCat = chip.dataset.cat;
+      renderCats();
+      renderMenu();
+    });
+    document.querySelector("main").addEventListener("click", (e) => {
+      const add = e.target.closest("[data-add]");
+      if (!add) return;
+      const id = Number(add.dataset.add);
+      basket.set(id, (basket.get(id) || 0) + 1);
+      renderMenuAll();
+    });
+    $("basket-clear").addEventListener("click", () => { basket.clear(); renderMenuAll(); });
+
+    // ---------- Order history by phone ----------
+    const form = $("search-form");
+    const results = $("results");
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const phone = digits(document.getElementById("phone").value);
+      const phone = digits($("phone").value);
       if (phone.length < 6) {
         results.innerHTML = `<div class="empty">Please enter a valid phone number.</div>`;
         return;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shop Settings</title>
-  <link rel="stylesheet" href="css/style.css?v=10" />
+  <link rel="stylesheet" href="css/style.css?v=11" />
 </head>
 <body>
   <header class="topbar">
@@ -17,7 +17,7 @@
 
   <main class="container">
     <h1>Shop settings</h1>
-    <p class="muted">Shown in the header, on receipts, in WhatsApp messages and in the UPI payment QR. Changes apply on every device after a page refresh.</p>
+    <p class="muted">Shown in the header, on receipts, in WhatsApp messages, in the UPI payment QR and on the public home page. Changes apply on every device after a page refresh.</p>
 
     <form class="card" id="settings-form" style="margin-top:1rem">
       <div class="form-grid-2">
@@ -49,6 +49,30 @@
           <label for="receipt_footer">Receipt footer</label>
           <input class="input" id="receipt_footer" maxlength="200" placeholder="Thank you! Visit again." />
         </div>
+        <div class="field span-all" style="margin-top:.75rem">
+          <h3 style="margin:0">Home page</h3>
+          <span class="hint">Shown to visitors on the public home page (index.html).</span>
+        </div>
+        <div class="field span-all">
+          <label for="tagline">Tagline</label>
+          <input class="input" id="tagline" maxlength="120" placeholder="e.g. Crispy dosas &amp; filter coffee since 1998" />
+        </div>
+        <div class="field">
+          <label for="whatsapp">WhatsApp number <span class="hint">(for "Order on WhatsApp")</span></label>
+          <input class="input" id="whatsapp" maxlength="20" inputmode="tel" placeholder="e.g. 9876543210" />
+        </div>
+        <div class="field">
+          <label for="maps_url">Google Maps link</label>
+          <input class="input" id="maps_url" type="url" maxlength="500" placeholder="https://maps.app.goo.gl/…" />
+        </div>
+        <div class="field span-all">
+          <label for="cover_image_url">Cover photo URL <span class="hint">(wide food or shop photo)</span></label>
+          <input class="input" id="cover_image_url" type="url" maxlength="500" placeholder="https://…" />
+        </div>
+        <div class="field span-all">
+          <label>Opening hours <span class="hint">(IST · a closing time earlier than opening means after midnight · leave all empty to hide)</span></label>
+          <div class="hours-grid" id="hours"></div>
+        </div>
         <div class="field span-all check-field">
           <label><input type="checkbox" id="hide_out_of_stock" /> Hide menu items when an ingredient runs out</label>
           <span class="hint">Applies to ingredients with stock tracking on (Ingredients page). Ticked: out-of-stock items are hidden on New bill and cannot be billed. Unticked: they stay visible with a ⚠ warning and can still be billed; stock goes below zero.</span>
@@ -63,12 +87,13 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=10"></script>
-  <script src="js/common.js?v=10"></script>
+  <script src="js/config.js?v=11"></script>
+  <script src="js/common.js?v=11"></script>
   <script>
     const { rpc, toast, fmtDate } = App;
     const $ = (id) => document.getElementById(id);
-    const FIELDS = ["shop_name", "shop_address", "shop_phone", "currency", "upi_id", "country_code", "receipt_footer"];
+    const FIELDS = ["shop_name", "shop_address", "shop_phone", "currency", "upi_id", "country_code", "receipt_footer",
+      "tagline", "whatsapp", "maps_url", "cover_image_url"];
     let me;
 
     (async () => {
@@ -91,7 +116,53 @@
     function fill(s) {
       FIELDS.forEach((f) => ($(f).value = (s && s[f]) || ""));
       $("hide_out_of_stock").checked = !s || s.hide_out_of_stock !== false;
+      renderHours(s && s.opening_hours);
       $("updated").textContent = s && s.updated_at ? `Last saved ${fmtDate(s.updated_at)}` : "";
+    }
+
+    // ---------- Opening hours ----------
+    const DAYS = [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
+
+    function renderHours(h) {
+      $("hours").innerHTML = DAYS.map(([d, label]) => {
+        const e = (h && h[d]) || {};
+        const closed = !!h && e.closed === true;
+        return `<div class="hours-row" data-day="${d}">
+          <span>${label}</span>
+          <input class="input" type="time" data-k="open" value="${e.open || ""}" aria-label="${label} opening time" ${closed ? "disabled" : ""} />
+          <input class="input" type="time" data-k="close" value="${e.close || ""}" aria-label="${label} closing time" ${closed ? "disabled" : ""} />
+          <label><input type="checkbox" data-k="closed" ${closed ? "checked" : ""} /> Closed</label>
+        </div>`;
+      }).join("") + `<div><button class="btn btn-ghost btn-sm" type="button" id="copy-mon">Copy Monday to all days</button></div>`;
+    }
+
+    $("hours").addEventListener("change", (e) => {
+      if (e.target.dataset.k !== "closed") return;
+      e.target.closest(".hours-row").querySelectorAll('input[type="time"]').forEach((i) => (i.disabled = e.target.checked));
+    });
+    $("hours").addEventListener("click", (e) => {
+      if (e.target.id !== "copy-mon") return;
+      const rows = [...$("hours").querySelectorAll(".hours-row")];
+      const get = (row, k) => row.querySelector(`[data-k="${k}"]`);
+      rows.slice(1).forEach((row) => {
+        ["open", "close"].forEach((k) => (get(row, k).value = get(rows[0], k).value));
+        get(row, "closed").checked = get(rows[0], "closed").checked;
+        row.querySelectorAll('input[type="time"]').forEach((i) => (i.disabled = get(row, "closed").checked));
+      });
+    });
+
+    // null when nothing is filled in (hours hidden on the home page).
+    function collectHours() {
+      const out = {};
+      let any = false;
+      $("hours").querySelectorAll(".hours-row").forEach((row) => {
+        const closed = row.querySelector('[data-k="closed"]').checked;
+        const open = row.querySelector('[data-k="open"]').value;
+        const close = row.querySelector('[data-k="close"]').value;
+        if (closed || open || close) any = true;
+        out[row.dataset.day] = closed ? { closed: true } : { closed: false, open, close };
+      });
+      return any ? out : null;
     }
 
     $("settings-form").addEventListener("submit", async (e) => {
@@ -101,7 +172,7 @@
       try {
         const s = await rpc("update_settings", {
           p_token: me.token,
-          p_settings: { ...Object.fromEntries(FIELDS.map((f) => [f, $(f).value])), hide_out_of_stock: $("hide_out_of_stock").checked },
+          p_settings: { ...Object.fromEntries(FIELDS.map((f) => [f, $(f).value])), hide_out_of_stock: $("hide_out_of_stock").checked, opening_hours: collectHours() },
         });
         App.applySettings(s);
         fill(s);

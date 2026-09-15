@@ -8,6 +8,7 @@ Live site: https://ogfoods.github.io/pos/
 
 | Feature | Customer (no login) | Admin | Super admin |
 |---|:---:|:---:|:---:|
+| Home page: live kitchen board, menu, WhatsApp order | ✅ | ✅ | ✅ |
 | Search order history by phone | ✅ | ✅ | ✅ |
 | Log in / log out | — | ✅ | ✅ |
 | Create a new bill | — | ✅ | ✅ |
@@ -24,19 +25,20 @@ Live site: https://ogfoods.github.io/pos/
 
 ---
 
-## 1. Customer: view order history
+## 1. Home page (public)
 
-**Page:** home page (`index.html`)
+**Page:** `index.html` — what every visitor sees. Set it up in **Shop settings → Home page** (see [6.2](#62-shop-settings)).
 
-1. Open the site.
-2. Type your phone number in the search bar. Spaces and dashes are fine; only digits are used. At least 6 digits are needed.
-3. Press **Search** (or Enter).
-
-You will see:
-- Number of orders and the **total spent** (cancelled orders are not counted).
-- One card per order, newest first, showing order number, date and time, status (paid / pending / cancelled), each item with quantity and price, and the order total.
-
-If nothing appears, check that the number matches the one given at billing.
+| Section | What visitors see |
+|---|---|
+| **Hero** | Shop name, tagline, cover photo, **Open now · closes 10 pm** / **Closed · opens 7 am** (from opening hours, IST), and buttons: **Order on WhatsApp**, **Call**, **Directions**, **See menu**. Buttons without a configured number or link are hidden. |
+| **Live numbers** | Orders cooking now, ready for pickup, and orders today. |
+| **Live from our kitchen** | The kitchen board, updating live: **Order received → Preparing → Ready** with order number, items and how long ago. A line at the top announces the latest change ("#214 · Masala Dosa is on the stove 🔥"). Customers can spot their own order number. No names, phone numbers or amounts are shown. |
+| **Today's favourites** | Up to 6 best sellers of the last 7 days, with photo and price. |
+| **Menu** | All available items with photo, price and category chips; **Few left** / **Sold out** tags from stock tracking. |
+| **WhatsApp basket** | Visitors tap **+ Add** on items; a bar at the bottom shows the count and **Order on WhatsApp** opens WhatsApp with the items pre-filled (e.g. "Hi OG Foods, I'd like to order: 2× Masala Dosa, 1× Filter Coffee"). You confirm and bill it as usual. |
+| **Visit us** | Address, phone, opening hours with today highlighted, **Get directions**. |
+| **Your orders** | Search order history by phone number (at least 6 digits); shows orders, status and total spent (cancelled not counted). |
 
 ---
 
@@ -305,6 +307,11 @@ You cannot remove your own super admin role or disable yourself, so there is alw
 | **Currency symbol** | Shown before every amount |
 | **Country code** | Added before 10-digit customer numbers in WhatsApp links (`91` for India) |
 | **Receipt footer** | Last line of receipts and WhatsApp messages |
+| **Tagline** | One line under the shop name on the home page |
+| **WhatsApp number** | Enables **Order on WhatsApp** and the menu basket on the home page. Enter the number with or without country code; 10-digit numbers get the country code added. |
+| **Google Maps link** | **Directions** buttons on the home page (paste the share link from Google Maps) |
+| **Cover photo URL** | Background of the home page hero (a wide https:// image) |
+| **Opening hours** | Per day open/close time or **Closed** (IST). Drives **Open now / Closed** and the hours table. A closing time earlier than the opening time means after midnight. **Copy Monday to all days** fills the rest. Leave everything empty to hide hours. |
 | **Hide menu items when an ingredient runs out** | Ticked: out-of-stock items are hidden and blocked on New bill. Unticked: they show a ⚠ warning and can still be billed. See [Stock](#56-stock). |
 
 Click **Save settings**. Other open devices pick up the change when their page is refreshed. **🖨️ Test receipt** prints a sample using the saved settings.

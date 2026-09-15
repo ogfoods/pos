@@ -35,7 +35,7 @@ flowchart LR
 
 ```
 POS_Billing/
-├── index.html          Public landing page: search order history by phone
+├── index.html          Public home page: hero + open status, live kitchen board, favourites, menu, WhatsApp basket, visit info, order lookup
 ├── adminlogin.html     Admin login form
 ├── dashboard.html      Admin dashboard: shift bar, bento cards, awaiting payment, New bill modal, shift modal
 ├── managebills.html    Super admin: list / search / status / delete orders
@@ -182,6 +182,8 @@ The Supabase publishable (anon) key is public by design — it is in `config.js`
 8. **Server-side totals.** `create_order` receives only menu item IDs and quantities. Prices come from `menu_items`, and only active items are accepted.
 9. **XSS protection.** All user-supplied text is passed through `App.esc()` before being inserted into HTML.
 
+Public home page data: `public_kitchen()` and `public_menu()` are callable without login. They are read-only and return only order numbers, item names/quantities per ticket and kitchen status, plus the menu. Visitors can infer roughly how busy the shop is.
+
 Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone number can see that customer's history (capped at 100 orders, minimum 6 digits). Add OTP verification if this is a concern.
 
 ## RPC function reference
@@ -192,7 +194,9 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `admin_logout(p_token)` | Public | Deletes the session |
 | `admin_me(p_token)` | Any admin | Returns `{username, role}`; used as a page guard |
 | `change_my_password(p_token, p_current, p_new)` | Any admin | Verifies current password, min 8 chars, signs out the user's other sessions; audited |
-| `get_settings()` | Public | Shop settings |
+| `get_settings()` | Public | Shop settings, including home page fields (`tagline`, `whatsapp`, `maps_url`, `cover_image_url`, `opening_hours`) |
+| `public_kitchen()` | Public | Live board: `queued`, `preparing`, `ready` (id, kitchen status, times, items; max 12 each, last 12h, not cancelled) and `orders_today`, `served_today` (IST). No names, phones, totals or payment data |
+| `public_menu()` | Public | Active items (name, category, price, image, stock ok/low/out) and up to 6 favourite item ids (most paid qty, 7 days). No quantities exposed |
 | `update_settings(p_token, p_settings)` | Super admin | Validates and saves all settings; audited with changed fields |
 | `list_admins(p_token)` | Super admin | Users with last login, active session count, `is_me` |
 | `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
