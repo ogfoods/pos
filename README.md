@@ -19,6 +19,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `settings.html` | Super admin | Shop name, address, phone, UPI ID, currency, receipt footer |
 | `audit.html` | Super admin | Who changed bills, menu, recipes, ingredients, staff, settings |
 | `account.html` | All admins | Change own password |
+| `kitchen.html` | All admins | Kitchen display: live queue new → preparing → ready → served, late colours, chime |
 | `sales.html` | Super admin | Sales by day/hour, payment methods, top items, staff, shift closes |
 
 ## Setup

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Audit Log</title>
-  <link rel="stylesheet" href="css/style.css?v=8" />
+  <link rel="stylesheet" href="css/style.css?v=9" />
 </head>
 <body>
   <header class="topbar">
@@ -17,7 +17,7 @@
 
   <main class="container">
     <h1>Audit log</h1>
-    <p class="muted">Who changed what: bill status and deletions, payment confirmations, menu, recipe and ingredient edits, staff, shift and settings changes.</p>
+    <p class="muted">Who changed what: bill status and deletions, kitchen status, payment confirmations, menu, recipe and ingredient edits, staff, shift and settings changes.</p>
 
     <div class="chips-row" id="cats" role="group" aria-label="Filter by area" style="margin-top:1rem"></div>
     <div class="toolbar">
@@ -40,15 +40,16 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=8"></script>
-  <script src="js/common.js?v=8"></script>
+  <script src="js/config.js?v=9"></script>
+  <script src="js/common.js?v=9"></script>
   <script>
     const { rpc, money, fmtDate, esc, toast, methodLabel } = App;
     const $ = (id) => document.getElementById(id);
     const PAGE = 50;
-    const CATS = [["", "All"], ["order", "Orders"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["shift", "Shifts"], ["settings", "Settings"]];
+    const CATS = [["", "All"], ["order", "Orders"], ["kitchen", "Kitchen"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["shift", "Shifts"], ["settings", "Settings"]];
     const LABELS = {
       "order.status": "Bill status changed",
+      "kitchen.status": "Kitchen status changed",
       "order.paid": "Payment confirmed",
       "order.delete": "Bill deleted",
       "menu.create": "Menu item added",
@@ -126,7 +127,7 @@
     function target(r) {
       const d = r.details || {};
       const kind = r.action.split(".")[0];
-      if (kind === "order") return `Order #${esc(r.entity_id)}`;
+      if (kind === "order" || kind === "kitchen") return `Order #${esc(r.entity_id)}`;
       if (kind === "settings") return "Shop settings";
       if (kind === "shift") return `Shift #${esc(r.entity_id)} · ${esc(d.username || "")}`;
       return esc(d.name || d.username || `#${r.entity_id}`);
@@ -135,6 +136,7 @@
     function details(r) {
       const d = r.details || {};
       switch (r.action) {
+        case "kitchen.status":
         case "order.status":
           return `${esc(d.from)} → <strong>${esc(d.to)}</strong>`;
         case "order.paid":

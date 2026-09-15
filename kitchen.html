@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kitchen</title>
+  <link rel="stylesheet" href="css/style.css?v=9" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span> · Kitchen</a>
+    <div class="topbar-right">
+      <span class="muted" id="live" title="Live updates"><span class="live-dot" aria-hidden="true"></span><span id="live-text">Connecting…</span></span>
+      <span class="kds-clock" id="clock"></span>
+      <button class="btn btn-ghost btn-sm" type="button" id="sound-btn">🔕 Sound off</button>
+      <button class="btn btn-ghost btn-sm" type="button" id="fs-btn">⛶ Full screen</button>
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="kds" id="kds">
+      <section class="kds-col" data-col="new"><h2><span>🆕 New</span><span class="badge" id="count-new">0</span></h2><div class="kds-list" id="list-new"></div></section>
+      <section class="kds-col" data-col="preparing"><h2><span>🔥 Preparing</span><span class="badge" id="count-preparing">0</span></h2><div class="kds-list" id="list-preparing"></div></section>
+      <section class="kds-col" data-col="ready"><h2><span>✅ Ready</span><span class="badge" id="count-ready">0</span></h2><div class="kds-list" id="list-ready"></div></section>
+    </div>
+
+    <section class="kds-served">
+      <details id="served-box">
+        <summary class="muted">Recently served (<span id="count-served">0</span>)</summary>
+        <div class="table-wrap" style="margin-top:.5rem">
+          <table>
+            <thead><tr><th>#</th><th>Customer</th><th>Items</th><th>Served</th><th></th></tr></thead>
+            <tbody id="served-rows"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=9"></script>
+  <script src="js/common.js?v=9"></script>
+  <script>
+    const { rpc, esc, toast } = App;
+    const $ = (id) => document.getElementById(id);
+    const COLS = ["new", "preparing", "ready"];
+    const NEXT = { new: ["preparing", "Start preparing"], preparing: ["ready", "Mark ready"], ready: ["served", "Served ✓"] };
+    const PREV = { preparing: "new", ready: "preparing", served: "ready" };
+    const LATE_MIN = 15;       // amber after this many minutes
+    const VERY_LATE_MIN = 25;  // red after this many minutes
+    const SOUND_KEY = "pos_kitchen_sound";
+
+    let me, active = [], served = [];
+    let clockOffset = 0;   // server time - device time (ms)
+    let seen = null;       // order ids already shown (null until first load)
+    let live = false, loadTimer = null, loading = false, failures = 0;
+    let soundOn = false, audioCtx = null;
+
+    (async () => {
+      try {
+        me = await App.requireAdmin();
+        if (!me) return;
+        try { soundOn = localStorage.getItem(SOUND_KEY) === "on"; } catch {}
+        renderSoundBtn();
+        await load();
+        subscribe();
+        // Fallback refresh, also covers missed broadcasts.
+        setInterval(() => { if (!document.hidden) load(); }, 10000);
+        setInterval(() => { renderClock(); renderAges(); }, 15000);
+        renderClock();
+        keepAwake();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    // ---------- Data ----------
+    async function load() {
+      if (loading) return;
+      loading = true;
+      try {
+        const data = await rpc("kitchen_orders", { p_token: me.token });
+        clockOffset = Date.parse(data.server_time) - Date.now();
+        const fresh = new Set(seen === null ? [] : data.active.filter((o) => o.kitchen_status === "new" && !seen.has(o.id)).map((o) => o.id));
+        active = data.active;
+        served = data.served;
+        seen = new Set([...active, ...served].map((o) => o.id).concat(seen ? [...seen] : []));
+        if (fresh.size) beep();
+        failures = 0;
+        render(fresh);
+        setLiveText();
+      } catch (err) {
+        failures++;
+        setLiveText(err);
+        if (failures === 1) toast(err.message, "error");
+      } finally {
+        loading = false;
+      }
+    }
+
+    const scheduleLoad = () => {
+      clearTimeout(loadTimer);
+      loadTimer = setTimeout(load, 300);
+    };
+
+    // Database broadcasts an empty "orders" event on topic "kitchen" whenever orders change.
+    function subscribe() {
+      try {
+        App.db
+          .channel("kitchen")
+          .on("broadcast", { event: "orders" }, scheduleLoad)
+          .subscribe((status) => {
+            live = status === "SUBSCRIBED";
+            if (live) scheduleLoad();
+            setLiveText();
+          });
+      } catch {
+        live = false;
+        setLiveText();
+      }
+    }
+
+    async function setStatus(id, to) {
+      const o = active.find((x) => x.id === id) || served.find((x) => x.id === id);
+      if (!o) return;
+      // Optimistic move, then confirm from the server.
+      const from = o.kitchen_status;
+      o.kitchen_status = to;
+      o.kitchen_updated_at = new Date(Date.now() + clockOffset).toISOString();
+      active = active.filter((x) => x.id !== id);
+      served = served.filter((x) => x.id !== id);
+      if (to === "served") served.unshift(o);
+      else active = [...active, o].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+      render();
+      try {
+        await rpc("set_kitchen_status", { p_token: me.token, p_id: id, p_status: to });
+      } catch (err) {
+        o.kitchen_status = from;
+        toast(err.message, "error");
+      }
+      load();
+    }
+
+    document.querySelector("main").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-to]");
+      if (b) setStatus(Number(b.dataset.id), b.dataset.to);
+    });
+
+    // ---------- Render ----------
+    const minutesSince = (iso) => Math.max(0, Math.floor((Date.now() + clockOffset - Date.parse(iso)) / 60000));
+    const ageText = (m) => (m < 1 ? "just now" : `${m} min`);
+    const lateClass = (m) => (m >= VERY_LATE_MIN ? "very-late" : m >= LATE_MIN ? "late" : "");
+
+    function card(o, fresh) {
+      const m = minutesSince(o.created_at);
+      const late = lateClass(m);
+      const [next, nextLabel] = NEXT[o.kitchen_status];
+      const prev = PREV[o.kitchen_status];
+      return `<article class="kds-card ${late} ${fresh ? "fresh" : ""}" data-created="${esc(o.created_at)}">
+        <div class="kds-head">
+          <span class="kds-id">#${o.id}</span>
+          <span class="kds-age">⏱ <span class="age-text">${ageText(m)}</span><span class="late-text">${late ? " · late" : ""}</span></span>
+        </div>
+        <div class="muted">${esc(o.customer_name || "Customer")}${o.payment_status === "pending" ? ` <span class="badge badge-pending">UPI pending</span>` : ""}</div>
+        <ul class="kds-items">
+          ${(o.items || []).map((i) => `<li><span class="q">${i.qty}×</span><span>${esc(i.name)}</span></li>`).join("")}
+        </ul>
+        <div class="kds-actions">
+          ${prev ? `<button class="btn btn-ghost" type="button" data-id="${o.id}" data-to="${prev}" aria-label="Move #${o.id} back" title="Move back">↩</button>` : ""}
+          <button class="btn" type="button" data-id="${o.id}" data-to="${next}">${nextLabel}</button>
+        </div>
+      </article>`;
+    }
+
+    function render(fresh = new Set()) {
+      COLS.forEach((col) => {
+        const list = active.filter((o) => o.kitchen_status === col);
+        $(`count-${col}`).textContent = list.length;
+        $(`list-${col}`).innerHTML = list.length
+          ? list.map((o) => card(o, fresh.has(o.id))).join("")
+          : `<div class="empty">${col === "new" ? "No new orders" : "Nothing here"}</div>`;
+      });
+      $("count-served").textContent = served.length;
+      $("served-rows").innerHTML = served.length
+        ? served
+            .map(
+              (o) => `<tr>
+              <td><strong>#${o.id}</strong></td>
+              <td>${esc(o.customer_name || "Customer")}</td>
+              <td class="wrap">${esc((o.items || []).map((i) => `${i.qty}× ${i.name}`).join(", "))}</td>
+              <td class="muted">${ageText(minutesSince(o.kitchen_updated_at))}${minutesSince(o.kitchen_updated_at) >= 1 ? " ago" : ""}</td>
+              <td><div class="row-actions"><button class="btn btn-ghost btn-sm" type="button" data-id="${o.id}" data-to="ready">Undo</button></div></td>
+            </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5" class="empty">Nothing served in the last 2 hours.</td></tr>`;
+    }
+
+    // Update timers and late colours without rebuilding cards.
+    function renderAges() {
+      document.querySelectorAll(".kds-card").forEach((el) => {
+        const m = minutesSince(el.dataset.created);
+        const late = lateClass(m);
+        el.classList.toggle("late", late === "late");
+        el.classList.toggle("very-late", late === "very-late");
+        el.querySelector(".age-text").textContent = ageText(m);
+        el.querySelector(".late-text").textContent = late ? " · late" : "";
+      });
+    }
+
+    function renderClock() {
+      $("clock").textContent = new Date(Date.now() + clockOffset).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+    }
+
+    function setLiveText(err) {
+      const dot = document.querySelector("#live .live-dot");
+      const ok = !err && failures === 0;
+      dot.classList.toggle("on", ok && live);
+      $("live-text").textContent = !ok ? "Offline, retrying…" : live ? "Live" : "Auto-refresh 10s";
+    }
+
+    // ---------- Sound (needs a tap to enable, browser rule) ----------
+    function renderSoundBtn() {
+      $("sound-btn").textContent = soundOn ? "🔔 Sound on" : "🔕 Sound off";
+      $("sound-btn").setAttribute("aria-pressed", String(soundOn));
+    }
+    $("sound-btn").addEventListener("click", () => {
+      soundOn = !soundOn;
+      try { localStorage.setItem(SOUND_KEY, soundOn ? "on" : "off"); } catch {}
+      renderSoundBtn();
+      if (soundOn) beep(true);
+    });
+
+    function beep(force = false) {
+      if (!soundOn && !force) return;
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        [0, 0.22].forEach((delay, i) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = i ? 1175 : 880;
+          const t0 = audioCtx.currentTime + delay;
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.4, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+          osc.connect(gain).connect(audioCtx.destination);
+          osc.start(t0);
+          osc.stop(t0 + 0.2);
+        });
+      } catch {}
+    }
+
+    // ---------- Full screen + keep screen on ----------
+    $("fs-btn").addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen?.().catch(() => {});
+    });
+
+    async function keepAwake() {
+      try {
+        if ("wakeLock" in navigator) await navigator.wakeLock.request("screen");
+      } catch {}
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) { keepAwake(); load(); }
+    });
+  </script>
+</body>
+</html>

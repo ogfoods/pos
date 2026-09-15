@@ -46,6 +46,7 @@ POS_Billing/
 ├── settings.html       Super admin: shop name, address, UPI ID, currency, receipt footer
 ├── audit.html          Super admin: audit log with area filter and search
 ├── account.html        Any admin: change own password
+├── kitchen.html        Any admin: kitchen display (new / preparing / ready columns, live refresh, chime)
 ├── sales.html          Super admin: sales KPIs, by-day / by-hour bars, methods, top items, staff, shift closes
 ├── css/
 │   └── style.css       Shared styles, responsive layout, dark mode
@@ -128,6 +129,7 @@ erDiagram
         text payment_status "paid | pending | cancelled"
         text payment_method "cash | upi | card"
         timestamptz paid_at
+        text kitchen_status "new | preparing | ready | served"
         bigint created_by FK
     }
     order_items {
@@ -160,6 +162,7 @@ Design notes:
 - **Price and name snapshots** in `order_items` keep old bills correct after a menu item is renamed, repriced or deleted (`menu_item_id` becomes `NULL`).
 - **Phone numbers** are stored as digits only, so `98765 43210` and `9876543210` match the same customer.
 - **Deleting an order** cascades to its `order_items`.
+- **Kitchen live refresh.** A statement trigger on `orders` (insert, delete, update of `kitchen_status`/`payment_status`) calls `realtime.send('{}', 'orders', 'kitchen', false)`: an empty broadcast on a public Realtime topic. No order data is broadcast; `kitchen.html` reacts by calling `kitchen_orders(token)`, and also polls every 10 s. The trigger swallows errors and is skipped if Realtime is missing, so billing never fails because of it. Orders existing when migration 009 ran were marked `served`.
 - Indexes: `orders(phone, created_at desc)` for lookup, `order_items(order_id)` for joins.
 
 ## Security model
@@ -192,6 +195,8 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
 | `revoke_admin_sessions(p_token, p_id)` | Super admin | Deletes a user's sessions (keeps the caller's); returns count; audited |
 | `list_audit_log(p_token, p_category, p_search, p_limit, p_offset)` | Super admin | Paged log; category = action prefix (`order`, `menu`, `ingredient`, `staff`, `settings`); search matches user, entity ID or details text |
+| `kitchen_orders(p_token)` | Any admin | `{server_time, active, served}`: active = not served/cancelled from the last 24h (oldest first, max 100); served = last 10 served in 2h |
+| `set_kitchen_status(p_token, p_id, p_status)` | Any admin | `new`/`preparing`/`ready`/`served`; rejects cancelled orders; audited |
 | `current_shift(p_token)` | Any admin | Own open shift with live totals and expected cash, or `null` |
 | `open_shift(p_token, p_opening_cash)` | Any admin | Opens a shift; one open shift per user; audited |
 | `close_shift(p_token, p_counted_cash, p_note, p_shift_id?)` | Any admin (own) / super admin (any, by id) | Freezes totals, stores expected/counted/difference; audited |

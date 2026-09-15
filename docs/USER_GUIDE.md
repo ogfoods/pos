@@ -18,6 +18,7 @@ Live site: https://ogfoods.github.io/pos/
 | Manage staff, shop settings, audit log | — | ❌ | ✅ |
 | Change own password | — | ✅ | ✅ |
 | Open / close own cash shift | — | ✅ | ✅ |
+| Kitchen screen | — | ✅ | ✅ |
 | Sales report and all shifts | — | ❌ | ✅ |
 
 ---
@@ -65,6 +66,7 @@ The header shows your username and role. The page has these cards:
 | Card | What it does | Available to |
 |---|---|---|
 | **New bill** | Opens the billing window | All admins |
+| **Kitchen screen** | Live order queue for the kitchen | All admins |
 | **Manage bills** | Opens the bill management page | Super admin only |
 | **Modify menu items** | Opens the menu editor | Super admin only |
 | **Sales** | Revenue, busy hours, top items, payment methods, shift closes | Super admin only |
@@ -113,6 +115,19 @@ The order is saved under the customer's phone number and appears in their histor
 
 ### Awaiting payment
 UPI bills not yet confirmed appear under **Awaiting payment** on the dashboard (refreshes every minute). Click **✓ Received** once the money arrives, or **Receipt** to print. Any admin can confirm payments.
+
+### Kitchen screen
+
+**Where:** Dashboard → **Kitchen screen** (`kitchen.html`). Any admin can open it; use a tablet or TV in the kitchen and click **⛶ Full screen**.
+
+- Every new bill appears in **🆕 New** within a second or two (top bar shows **Live**; if live updates are unavailable it shows **Auto-refresh 10s** and still refreshes).
+- Each card shows the order number, customer, items with quantities, and how long ago it was billed. UPI bills not yet confirmed carry a **UPI pending** badge.
+- Tap **Start preparing** → **Mark ready** → **Served ✓** to move a card along. **↩** moves it back one step.
+- Cards turn **amber after 15 minutes** and **red after 25 minutes**, with "late" next to the timer.
+- Tap **🔕 Sound off** once to switch on a chime for new orders (browsers only allow sound after a tap). The choice is remembered on that device.
+- **Recently served** (bottom) lists orders served in the last 2 hours with **Undo**.
+- Cancelled bills disappear from the screen. Orders older than 24 hours are not shown.
+- Kitchen status changes are recorded in the audit log.
 
 ### Shifts (cash drawer count)
 
@@ -272,6 +287,7 @@ A record of who did what and when, newest first:
 | Menu | Items added, edited (old → new values), deleted, recipe changes (before / after) |
 | Ingredients | Added, edited, deleted |
 | Staff | Users added or edited, password resets, sign-outs, own password changes |
+| Kitchen | Order moved between new / preparing / ready / served |
 | Shifts | Opened (opening cash), closed (expected, counted, difference) |
 | Settings | Every changed field (old → new) |
 
