@@ -14,6 +14,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `managebills.html` | Super admin | Search, view, change status, delete orders |
 | `menu.html` | Super admin | Add / edit / hide / delete menu items, link ingredients to each item |
 | `ingredients.html` | Super admin | Ingredient master list (name + unit) |
+| `usage.html` | Super admin | Ingredients consumed per day (IST), CSV export |
 
 ## Setup
 

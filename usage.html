@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ingredient Usage</title>
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Ingredient usage</h1>
+    <p class="muted">Total ingredients consumed by orders. Days follow IST (India time). Cancelled orders are excluded.</p>
+
+    <form class="card usage-filters" id="filters">
+      <div class="chips-row" role="group" aria-label="Quick ranges">
+        <button type="button" class="chip" data-range="today">Today</button>
+        <button type="button" class="chip" data-range="yesterday">Yesterday</button>
+        <button type="button" class="chip" data-range="7">Last 7 days</button>
+        <button type="button" class="chip" data-range="30">Last 30 days</button>
+        <button type="button" class="chip" data-range="month">This month</button>
+      </div>
+      <div class="usage-grid">
+        <div class="field">
+          <label for="from">From</label>
+          <input class="input" id="from" type="date" required />
+        </div>
+        <div class="field">
+          <label for="to">To</label>
+          <input class="input" id="to" type="date" required />
+        </div>
+        <div class="field check-field">
+          <label><input type="checkbox" id="by-day" /> Split by day</label>
+        </div>
+        <div class="usage-actions">
+          <button class="btn" type="submit" id="run">Show</button>
+          <button class="btn btn-ghost" type="button" id="csv" disabled>Export CSV</button>
+        </div>
+      </div>
+    </form>
+
+    <p class="muted" id="summary" style="margin:1rem 0 .75rem"></p>
+    <div class="table-wrap">
+      <table>
+        <thead id="head"></thead>
+        <tbody id="rows"><tr><td class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=5"></script>
+  <script src="js/common.js?v=5"></script>
+  <script>
+    const { rpc, esc, toast } = App;
+    const $ = (id) => document.getElementById(id);
+    const TZ = "Asia/Kolkata";
+    let me, result = null;
+
+    // YYYY-MM-DD for a Date, in IST.
+    const istDate = (d) => d.toLocaleDateString("en-CA", { timeZone: TZ });
+    const addDays = (ymd, n) => {
+      const d = new Date(ymd + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const fmtDay = (ymd) =>
+      new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    const fmtQty = (n) => Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+    const bigUnit = (qty, unit) => {
+      const n = Number(qty);
+      if (unit === "g" && n >= 1000) return `${fmtQty(n / 1000)} kg`;
+      if (unit === "ml" && n >= 1000) return `${fmtQty(n / 1000)} l`;
+      return "";
+    };
+
+    function setRange(kind) {
+      const today = istDate(new Date());
+      let from = today, to = today;
+      if (kind === "yesterday") from = to = addDays(today, -1);
+      else if (kind === "7") from = addDays(today, -6);
+      else if (kind === "30") from = addDays(today, -29);
+      else if (kind === "month") from = today.slice(0, 8) + "01";
+      $("from").value = from;
+      $("to").value = to;
+      document.querySelectorAll("[data-range]").forEach((c) => c.classList.toggle("active", c.dataset.range === kind));
+    }
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (!me) return;
+        const today = istDate(new Date());
+        $("from").max = $("to").max = today;
+        setRange("today");
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    document.querySelector(".chips-row").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-range]");
+      if (!chip) return;
+      setRange(chip.dataset.range);
+      load();
+    });
+    ["from", "to"].forEach((id) =>
+      $(id).addEventListener("change", () => document.querySelectorAll("[data-range]").forEach((c) => c.classList.remove("active")))
+    );
+    $("by-day").addEventListener("change", load);
+    $("filters").addEventListener("submit", (e) => { e.preventDefault(); load(); });
+
+    async function load() {
+      const from = $("from").value, to = $("to").value;
+      if (!from || !to) return toast("Choose both dates.", "error");
+      if (to < from) return toast("End date must be on or after start date.", "error");
+      const btn = $("run");
+      btn.disabled = true;
+      try {
+        result = await rpc("ingredient_usage", { p_token: me.token, p_from: from, p_to: to, p_by_day: $("by-day").checked });
+        result.byDay = $("by-day").checked;
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function render() {
+      const { rows, order_count, orders_with_ingredients, from, to, byDay } = result;
+      const range = from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`;
+      const missing = order_count - orders_with_ingredients;
+      $("summary").innerHTML =
+        `<strong>${esc(range)}</strong> · ${order_count} order${order_count === 1 ? "" : "s"}` +
+        (missing > 0 ? ` · <span title="Items in these orders had no ingredients linked when billed">${missing} without ingredient data</span>` : "");
+
+      $("head").innerHTML = `<tr>${byDay ? "<th>Date</th>" : ""}<th>Ingredient</th><th class="num">Total used</th><th>Unit</th></tr>`;
+      $("csv").disabled = !rows.length;
+      const cols = byDay ? 4 : 3;
+      if (!rows.length) {
+        $("rows").innerHTML = `<tr><td colspan="${cols}" class="empty">No ingredient usage in this period.</td></tr>`;
+        return;
+      }
+      let lastDay = null;
+      $("rows").innerHTML = rows
+        .map((r) => {
+          const dayCell = byDay ? `<td>${r.day !== lastDay ? esc(fmtDay(r.day)) : ""}</td>` : "";
+          lastDay = r.day;
+          const alt = bigUnit(r.total, r.unit);
+          return `<tr>${dayCell}
+            <td><strong>${esc(r.name)}</strong></td>
+            <td class="num">${fmtQty(r.total)}${alt ? `<div class="muted" style="font-size:.8rem">${alt}</div>` : ""}</td>
+            <td>${esc(r.unit)}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    $("csv").addEventListener("click", () => {
+      if (!result || !result.rows.length) return;
+      const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const header = (result.byDay ? ["Date (IST)"] : []).concat(["Ingredient", "Total used", "Unit"]);
+      const lines = [header.map(q).join(",")].concat(
+        result.rows.map((r) => (result.byDay ? [r.day] : []).concat([r.name, r.total, r.unit]).map(q).join(","))
+      );
+      const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `ingredient-usage_${result.from}_to_${result.to}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  </script>
+</body>
+</html>

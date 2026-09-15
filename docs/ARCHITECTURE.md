@@ -41,6 +41,7 @@ POS_Billing/
 ├── managebills.html    Super admin: list / search / status / delete orders
 ├── menu.html           Super admin: add / edit / hide / delete menu items, link ingredients
 ├── ingredients.html    Super admin: ingredient master list
+├── usage.html          Super admin: ingredient usage report (IST days, CSV export)
 ├── css/
 │   └── style.css       Shared styles, responsive layout, dark mode
 ├── js/
@@ -132,7 +133,7 @@ Ingredient tables (not all columns shown above):
 Design notes:
 - **Ingredient snapshots** make a daily consumption report a simple query that is unaffected by later recipe edits:
   ```sql
-  select o.created_at::date as day, oii.ingredient_name, oii.unit, sum(oii.qty) as total
+  select (o.created_at at time zone 'Asia/Kolkata')::date as day, oii.ingredient_name, oii.unit, sum(oii.qty) as total
   from order_item_ingredients oii join orders o on o.id = oii.order_id
   where o.payment_status <> 'cancelled'
   group by 1, 2, 3 order by 1 desc, 2;
@@ -173,6 +174,7 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `delete_ingredient(p_token, p_id)` | Super admin | Deletes; removed from recipes, order snapshots kept |
 | `list_menu_recipes(p_token)` | Super admin | `{menu_item_id: [{ingredient_id, name, unit, qty}]}` |
 | `set_menu_item_ingredients(p_token, p_menu_item_id, p_items)` | Super admin | Replaces an item's recipe; `p_items` = `[{ingredient_id, qty}]` |
+| `ingredient_usage(p_token, p_from, p_to, p_by_day)` | Super admin | Sums `order_item_ingredients` for non-cancelled orders between IST dates (max 1 year); returns `{from, to, order_count, orders_with_ingredients, rows:[{day?, name, unit, total}]}` |
 | `list_orders(p_token, p_search, p_limit, p_offset)` | Super admin | Paged orders with items; searches phone, name or order ID |
 | `update_order_status(p_token, p_id, p_status)` | Super admin | Sets `paid`, `pending` or `cancelled` |
 | `delete_order(p_token, p_id)` | Super admin | Deletes an order and its items |

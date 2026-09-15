@@ -14,6 +14,7 @@ Live site: https://ogfoods.github.io/pos/
 | Manage bills (view, change status, delete) | — | ❌ | ✅ |
 | Modify menu items | — | ❌ | ✅ |
 | Manage ingredients and link them to items | — | ❌ | ✅ |
+| View ingredient usage report | — | ❌ | ✅ |
 
 ---
 
@@ -54,15 +55,16 @@ Accounts are not created in the app. See [Managing admin accounts](#6-managing-a
 
 **Page:** `dashboard.html` (opens after login)
 
-The header shows your username and role. The page has three cards:
+The header shows your username and role. The page has four cards:
 
 | Card | What it does | Available to |
 |---|---|---|
 | **New bill** | Opens the billing window | All admins |
 | **Manage bills** | Opens the bill management page | Super admin only |
 | **Modify menu items** | Opens the menu editor | Super admin only |
+| **Ingredient usage** | Opens the ingredient consumption report | Super admin only |
 
-For a normal admin, the two super admin cards are greyed out with a 🔒 label, and clicking them shows a message.
+For a normal admin, the super admin cards are greyed out with a 🔒 label, and clicking them shows a message.
 
 ---
 
@@ -159,6 +161,20 @@ Link the ingredients each menu item needs, so the app records how much of every 
 3. **+ Add ingredient** adds a row; **×** removes one. Click **Save**.
 
 **What happens when billing:** each new order stores ingredient usage = recipe quantity × quantity ordered (2 Dosa → 300 g batter, 20 ml oil). This is saved with the order, so editing a recipe later does not change past records. Orders created before a recipe was linked have no ingredient data.
+
+### 5.4 Ingredient usage report
+
+**Where:** Dashboard → **Ingredient usage** (`usage.html`)
+
+1. Pick a quick range (**Today**, **Yesterday**, **Last 7 days**, **Last 30 days**, **This month**) or set **From** / **To** dates and click **Show**.
+2. The table lists each ingredient with the total used and its unit. Large gram/millilitre totals also show kg / l.
+3. Tick **Split by day** to see one block per day.
+4. Click **Export CSV** to download the table for Excel / Google Sheets.
+
+Notes:
+- Days follow **IST** (midnight to midnight, India time).
+- Cancelled orders are excluded. Changing an order to cancelled removes it from the report.
+- The summary shows the number of orders and how many had no ingredient data (items without linked ingredients at billing time). Ranges are limited to one year.
 
 ---
 

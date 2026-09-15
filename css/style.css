@@ -135,14 +135,30 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 .bento-card.locked { opacity: .55; cursor: not-allowed; }
 .bento-card.locked:hover { transform: none; border-color: var(--border); }
 .lock-tag { position: absolute; top: 1rem; right: 1rem; }
+.bento-card.wide { grid-column: span 3; }
 
 @media (max-width: 760px) {
   .bento { grid-template-columns: 1fr 1fr; }
   .bento-card.primary { grid-column: span 2; grid-row: span 1; }
+  .bento-card.wide { grid-column: span 2; }
 }
 @media (max-width: 460px) {
   .bento { grid-template-columns: 1fr; }
-  .bento-card.primary { grid-column: span 1; }
+  .bento-card.primary, .bento-card.wide { grid-column: span 1; }
+}
+
+/* ---------- Usage report ---------- */
+.chips-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.chips-row .chip { padding: .4rem .9rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: .875rem; cursor: pointer; }
+.chips-row .chip:hover { border-color: var(--primary); }
+.chips-row .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.usage-grid { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: .75rem; align-items: end; }
+.usage-grid .field { margin: 0; }
+.usage-actions { display: flex; gap: .5rem; }
+@media (max-width: 760px) {
+  .usage-grid { grid-template-columns: 1fr 1fr; }
+  .usage-actions { grid-column: 1 / -1; }
+  .usage-actions .btn { flex: 1; }
 }
 
 /* ---------- Modal ---------- */

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=4" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -41,6 +41,14 @@
         <div>
           <h2>Modify menu items</h2>
           <p class="muted">Add, edit, price and hide items.</p>
+        </div>
+      </a>
+      <a class="bento-card wide super-only" href="usage.html">
+        <span class="badge lock-tag hidden">🔒 Super admin</span>
+        <div class="bento-icon">📊</div>
+        <div>
+          <h2>Ingredient usage</h2>
+          <p class="muted">Total ingredients consumed per day (IST), with CSV export.</p>
         </div>
       </a>
     </div>
@@ -123,8 +131,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=4"></script>
-  <script src="js/common.js?v=4"></script>
+  <script src="js/config.js?v=5"></script>
+  <script src="js/common.js?v=5"></script>
   <script>
     const { rpc, money, esc, digits, toast, renderItems, cfg } = App;
     let me = null;
