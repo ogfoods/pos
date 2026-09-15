@@ -13,7 +13,8 @@ Live site: https://ogfoods.github.io/pos/
 | Create a new bill | — | ✅ | ✅ |
 | Manage bills (view, change status, delete) | — | ❌ | ✅ |
 | Modify menu items | — | ❌ | ✅ |
-| Manage ingredients and link them to items | — | ❌ | ✅ |
+| Manage ingredients, recipes and stock | — | ❌ | ✅ |
+| See low stock warnings | — | ✅ | ✅ |
 | View ingredient usage report | — | ❌ | ✅ |
 | Manage staff, shop settings, audit log | — | ❌ | ✅ |
 | Change own password | — | ✅ | ✅ |
@@ -97,6 +98,8 @@ The window has three steps. The bar at the top shows which step you are on. Use 
 2. Each item shows its photo (or first letter), name, category and price. Use **+** and **−** to set the quantity. Selected items are highlighted.
 3. The bar at the bottom shows a cart badge with the item count and the running total.
 4. Click **Next** (at least one item is required).
+
+Stock warnings: a red **⚠** means out of stock and an amber **⚠** means low stock. Tap it for details. Depending on Shop settings, out-of-stock items are either hidden or shown with the warning. See [Stock](#56-stock).
 
 If the list is empty, a super admin needs to add menu items first.
 
@@ -240,6 +243,36 @@ Notes:
 
 Days and hours follow IST. Bills are dated by when they were created. Ranges are limited to one year.
 
+### 5.6 Stock
+
+**Where:** Dashboard → **Modify menu items** → **Manage ingredients** (`ingredients.html`), **Stock** button on each row.
+
+Stock is tracked per ingredient. An ingredient is **Not tracked** until you record stock for it, so nothing is blocked before you start.
+
+| Task | How |
+|---|---|
+| **Add a purchase** | **Stock** → **➕ Purchase** → quantity bought → **Save**. Adds to stock. |
+| **Record waste** | **Stock** → **🗑 Waste** → quantity → **Save**. Subtracts from stock. |
+| **Stock count** | **Stock** → **🔢 Count** → the actual quantity you counted → **Save**. Sets stock to that number. |
+| **Low stock alert** | **Stock** → **Low stock alert at** → e.g. `500` → **Save tracking**. |
+| **Stop tracking** | **Stock** → untick **Track stock** → **Save tracking**. |
+
+The screen shows "Stock after saving" before you save, and **History** lists every change: purchases, waste, counts, and each bill (**Bill #12**) or undone bill (**Bill undone #12**).
+
+**What happens automatically**
+- Each bill subtracts its ingredients (recipe quantity × quantity sold) from tracked stock.
+- **Cancelling** a bill puts the ingredients back; changing it back from cancelled takes them again. **Deleting** a bill that was not cancelled also puts them back.
+- The dashboard shows a **⚠ Low stock** list (all admins) for tracked ingredients at or below their alert level, or at zero.
+
+**Out of stock on New bill** depends on **Shop settings → Hide menu items when an ingredient runs out**:
+
+| Setting | New bill screen |
+|---|---|
+| **Ticked** (default) | Items that cannot be made are hidden ("N items hidden: out of stock"). **+** stops at the number stock allows. If stock ran out meanwhile, saving shows e.g. "Not enough Rice: 50 g left, this bill needs 150 g." |
+| **Unticked** | Items stay visible with a red **⚠**. Tap it to see which ingredient is short, how much is left and how much each item needs. The bill still saves, stock goes below zero, and a "Stock below zero: …" message appears. |
+
+In both modes, items running low show an amber **⚠** with the same details. The menu page also marks items **out of stock** / **low stock**.
+
 ---
 
 ## 6. Staff, settings and audit log (super admin)
@@ -272,6 +305,7 @@ You cannot remove your own super admin role or disable yourself, so there is alw
 | **Currency symbol** | Shown before every amount |
 | **Country code** | Added before 10-digit customer numbers in WhatsApp links (`91` for India) |
 | **Receipt footer** | Last line of receipts and WhatsApp messages |
+| **Hide menu items when an ingredient runs out** | Ticked: out-of-stock items are hidden and blocked on New bill. Unticked: they show a ⚠ warning and can still be billed. See [Stock](#56-stock). |
 
 Click **Save settings**. Other open devices pick up the change when their page is refreshed. **🖨️ Test receipt** prints a sample using the saved settings.
 
@@ -286,6 +320,7 @@ A record of who did what and when, newest first:
 | Orders | Status changes (from → to), payment confirmations, deleted bills (with a full copy of the bill) |
 | Menu | Items added, edited (old → new values), deleted, recipe changes (before / after) |
 | Ingredients | Added, edited, deleted |
+| Stock | Purchases, waste, counts (before → after), tracking and alert changes |
 | Staff | Users added or edited, password resets, sign-outs, own password changes |
 | Kitchen | Order moved between new / preparing / ready / served |
 | Shifts | Opened (opening cash), closed (expected, counted, difference) |

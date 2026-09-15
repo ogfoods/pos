@@ -40,7 +40,7 @@ POS_Billing/
 ├── dashboard.html      Admin dashboard: shift bar, bento cards, awaiting payment, New bill modal, shift modal
 ├── managebills.html    Super admin: list / search / status / delete orders
 ├── menu.html           Super admin: add / edit / hide / delete menu items, link ingredients
-├── ingredients.html    Super admin: ingredient master list
+├── ingredients.html    Super admin: ingredients, stock purchase / waste / count, tracking, history
 ├── usage.html          Super admin: ingredient usage report (IST days, CSV export)
 ├── staff.html          Super admin: users, roles, password resets, sign-outs
 ├── settings.html       Super admin: shop name, address, UPI ID, currency, receipt footer
@@ -146,6 +146,8 @@ Other tables (not all columns shown above):
 - `settings` — exactly one row (`id = 1`): shop name, address, phone, currency, UPI ID, country code, receipt footer.
 - `audit_log(admin_id, admin_username snapshot, action, entity_id, details jsonb, created_at)` — `action` is `area.verb` (`order.status`, `menu.update`, `staff.create`, …). Updates store `details.changes = {field: [old, new]}` (built by `_jsonb_diff`); deletes store a snapshot of the row.
 - `shifts(admin_id, opened_at, opening_cash, closed_at, closed_by, counted_cash, expected_cash, difference, totals jsonb, note)` — one open shift per admin (partial unique index). Expected cash = opening + that admin's paid cash bills created during the shift; `totals` (cash/upi/card/sales/pending/cancelled) is frozen at close.
+- `ingredients` also has `track_stock`, `stock`, `low_stock_at`; `settings.hide_out_of_stock` (default true).
+- `stock_movements(ingredient_id, kind purchase|waste|adjust|sale|sale_reversal, qty signed, balance_after, order_id, admin_id, note)` — every stock change.
 - `login_attempts(username, ip, succeeded, created_at)` — rate-limit window, purged after a day.
 - `ingredients(id, name unique case-insensitive, unit in g|kg|ml|l|pcs)`
 - `menu_item_ingredients(menu_item_id, ingredient_id, qty)` — quantity per **one** unit of the menu item; PK on both IDs.
@@ -162,6 +164,7 @@ Design notes:
 - **Price and name snapshots** in `order_items` keep old bills correct after a menu item is renamed, repriced or deleted (`menu_item_id` becomes `NULL`).
 - **Phone numbers** are stored as digits only, so `98765 43210` and `9876543210` match the same customer.
 - **Deleting an order** cascades to its `order_items`.
+- **Stock.** `create_order` calls `_stock_deduct_order` after writing the ingredient snapshot: tracked ingredients are locked (`for update`, id order) and reduced; with `hide_out_of_stock` on it raises `Not enough …` (whole bill rolls back), otherwise it allows negative stock and returns `stock_warnings`. Cancelling or deleting a non-cancelled bill runs `_stock_restore_order`, which reverses the order's net movements; un-cancelling deducts again. Untracked ingredients are ignored.
 - **Kitchen live refresh.** A statement trigger on `orders` (insert, delete, update of `kitchen_status`/`payment_status`) calls `realtime.send('{}', 'orders', 'kitchen', false)`: an empty broadcast on a public Realtime topic. No order data is broadcast; `kitchen.html` reacts by calling `kitchen_orders(token)`, and also polls every 10 s. The trigger swallows errors and is skipped if Realtime is missing, so billing never fails because of it. Orders existing when migration 009 ran were marked `served`.
 - Indexes: `orders(phone, created_at desc)` for lookup, `order_items(order_id)` for joins.
 
@@ -197,6 +200,11 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `list_audit_log(p_token, p_category, p_search, p_limit, p_offset)` | Super admin | Paged log; category = action prefix (`order`, `menu`, `ingredient`, `staff`, `settings`); search matches user, entity ID or details text |
 | `kitchen_orders(p_token)` | Any admin | `{server_time, active, served}`: active = not served/cancelled from the last 24h (oldest first, max 100); served = last 10 served in 2h |
 | `set_kitchen_status(p_token, p_id, p_status)` | Any admin | `new`/`preparing`/`ready`/`served`; rejects cancelled orders; audited |
+| `menu_stock(p_token)` | Any admin | `{hide_out_of_stock, items: {menu_item_id: {status ok|low|out, can_make, short:[{name, unit, stock, need}]}}}` for items with tracked ingredients |
+| `low_stock(p_token)` | Any admin | Tracked ingredients at or below `low_stock_at` (or zero) |
+| `record_stock(p_token, p_ingredient_id, p_kind, p_qty, p_note)` | Super admin | `purchase` (+), `waste` (−), `count` (set); turns tracking on; audited |
+| `update_stock_settings(p_token, p_id, p_track, p_low_stock_at)` | Super admin | Tracking on/off and alert level; audited |
+| `list_stock_movements(p_token, p_ingredient_id, p_limit)` | Super admin | Latest movements (max 200) |
 | `current_shift(p_token)` | Any admin | Own open shift with live totals and expected cash, or `null` |
 | `open_shift(p_token, p_opening_cash)` | Any admin | Opens a shift; one open shift per user; audited |
 | `close_shift(p_token, p_counted_cash, p_note, p_shift_id?)` | Any admin (own) / super admin (any, by id) | Freezes totals, stores expected/counted/difference; audited |

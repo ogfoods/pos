@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=9" />
+  <link rel="stylesheet" href="css/style.css?v=10" />
 </head>
 <body>
   <header class="topbar">
@@ -100,6 +100,15 @@
         </div>
       </a>
     </div>
+
+    <!-- Tracked ingredients at or below their alert level -->
+    <section class="hidden" id="low-stock">
+      <div class="section-head">
+        <h2>⚠ Low stock <span class="badge badge-pending" id="low-count">0</span></h2>
+        <a class="btn btn-ghost btn-sm hidden" id="low-link" href="ingredients.html">Update stock</a>
+      </div>
+      <div class="low-list" id="low-list"></div>
+    </section>
 
     <!-- UPI bills saved as pending until payment is confirmed -->
     <section class="hidden" id="pending">
@@ -251,8 +260,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/common.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/common.js?v=10"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -263,6 +272,9 @@
     let payMethod = "cash";
     let saved = null; // order returned by create_order
     let pending = [];
+    let stock = { hide_out_of_stock: true, items: {} };
+    let lowStock = [];
+    const openInfo = new Set(); // menu item ids with the stock info line open
     const ARROW = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>`;
 
     (async () => {
@@ -283,7 +295,8 @@
         }
         loadPending();
         loadShift();
-        setInterval(() => { if (!document.hidden) { loadPending(); loadShift(); } }, 60000);
+        loadLowStock();
+        setInterval(() => { if (!document.hidden) { loadPending(); loadShift(); loadLowStock(); } }, 60000);
       } catch (err) {
         toast(err.message, "error");
       }
@@ -540,7 +553,11 @@
     // ---------- Step 2: items ----------
     async function loadMenu() {
       try {
-        menu = await rpc("list_menu", { p_token: me.token, p_include_inactive: false });
+        [menu, stock] = await Promise.all([
+          rpc("list_menu", { p_token: me.token, p_include_inactive: false }),
+          rpc("menu_stock", { p_token: me.token }).catch(() => ({ hide_out_of_stock: false, items: {} })),
+        ]);
+        openInfo.clear();
         renderChips();
         renderMenu();
       } catch (err) {
@@ -568,11 +585,57 @@
       renderMenu();
     });
 
+    // ---------- Stock ----------
+    const fmtQty = (n) => Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+    const stockOf = (m) => stock.items[m.id] || { status: "ok", can_make: null, short: [] };
+    // Hidden only when the shop setting says so (never while already in the cart).
+    const hiddenOut = (m) => stock.hide_out_of_stock && stockOf(m).status === "out" && !cart.has(m.id);
+
+    function hiddenNote() {
+      const n = menu.filter(hiddenOut).length;
+      return n ? `<div class="stock-note">${n} item${n === 1 ? "" : "s"} hidden: out of stock.</div>` : "";
+    }
+
+    function stockBadge(m) {
+      const st = stockOf(m);
+      if (st.status !== "out" && st.status !== "low") return "";
+      const label = st.status === "out" ? "Out of stock" : "Low stock";
+      return ` <button type="button" class="stock-warn ${st.status}" data-stock-info="${m.id}" aria-expanded="${openInfo.has(m.id)}" aria-label="${label}: ${esc(m.name)}" title="${label}">⚠</button>`;
+    }
+
+    function stockInfo(m) {
+      const st = stockOf(m);
+      const lines = (st.short || []).map(
+        (s) => `${esc(s.name)}: ${fmtQty(s.stock)} ${esc(s.unit)} left, needs ${fmtQty(s.need)} ${esc(s.unit)} per item`
+      );
+      const head =
+        st.status === "out"
+          ? "<strong>Out of stock.</strong> You can still bill it; stock will go below zero."
+          : `<strong>Low stock.</strong> Enough for about ${st.can_make} more.`;
+      return `<div class="stock-info ${st.status}">${head}${lines.length ? "<br>" + lines.join("<br>") : ""}</div>`;
+    }
+
+    // Low stock list on the dashboard (all admins).
+    async function loadLowStock() {
+      try {
+        lowStock = await rpc("low_stock", { p_token: me.token });
+      } catch {
+        return;
+      }
+      document.getElementById("low-stock").classList.toggle("hidden", !lowStock.length);
+      document.getElementById("low-count").textContent = lowStock.length;
+      document.getElementById("low-link").classList.toggle("hidden", me.role !== "super");
+      document.getElementById("low-list").innerHTML = lowStock
+        .map((i) => `<span class="low-chip ${Number(i.stock) <= 0 ? "out" : ""}"><strong>${esc(i.name)}</strong> ${fmtQty(i.stock)} ${esc(i.unit)}${Number(i.stock) <= 0 ? " · out" : ""}</span>`)
+        .join("");
+    }
+
     function renderMenu() {
       const box = document.getElementById("menu-pick");
       const q = document.getElementById("item-filter").value.trim().toLowerCase();
       const list = menu.filter(
         (m) =>
+          !hiddenOut(m) &&
           (activeCat === "All" || m.category === activeCat) &&
           (!q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q))
       );
@@ -582,7 +645,7 @@
         box.innerHTML = `<div class="empty">No matching items.</div>`;
       } else {
         let lastCat = null;
-        box.innerHTML = list
+        box.innerHTML = hiddenNote() + list
           .map((m) => {
             const qty = cart.get(m.id) || 0;
             const img = m.image_url ? `<img src="${esc(m.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : "";
@@ -592,7 +655,7 @@
               <div class="item-card ${qty ? "selected" : ""}">
                 <div class="thumb" aria-hidden="true">${esc(m.name.charAt(0).toUpperCase())}${img}</div>
                 <div class="item-info">
-                  <div class="item-name">${esc(m.name)}</div>
+                  <div class="item-name">${esc(m.name)}${stockBadge(m)}</div>
                   <div class="item-cat">${esc(m.category)}</div>
                   <div class="item-price">${money(m.price)}</div>
                 </div>
@@ -601,6 +664,7 @@
                   <span>${qty}</span>
                   <button type="button" class="plus" data-id="${m.id}" data-d="1" aria-label="Increase ${esc(m.name)}">+</button>
                 </div>
+                ${openInfo.has(m.id) ? stockInfo(m) : ""}
               </div>`;
           })
           .join("");
@@ -609,10 +673,21 @@
     }
 
     document.getElementById("menu-pick").addEventListener("click", (e) => {
+      const info = e.target.closest("[data-stock-info]");
+      if (info) {
+        const sid = Number(info.dataset.stockInfo);
+        openInfo.has(sid) ? openInfo.delete(sid) : openInfo.add(sid);
+        return renderMenu();
+      }
       const b = e.target.closest("button[data-id]");
       if (!b) return;
       const id = Number(b.dataset.id);
       const q = Math.max(0, (cart.get(id) || 0) + Number(b.dataset.d));
+      const item = menu.find((x) => x.id === id);
+      const st = stockOf(item);
+      if (Number(b.dataset.d) > 0 && stock.hide_out_of_stock && st.can_make !== null && q > st.can_make) {
+        return toast(`Only ${st.can_make} × ${item.name} can be made with the current stock.`, "error");
+      }
       q ? cart.set(id, q) : cart.delete(id);
       renderMenu();
     });
@@ -674,6 +749,10 @@
         renderSaved();
         showStep(3);
         toast(`Order #${saved.id} saved · ${money(saved.total)}`, "success");
+        if (saved.stock_warnings && saved.stock_warnings.length) {
+          toast(`⚠ Stock below zero: ${saved.stock_warnings.map((w) => w.name).join(", ")}`, "error");
+        }
+        loadLowStock();
         if (saved.payment_status === "pending") loadPending();
         loadShift();
       } catch (err) {

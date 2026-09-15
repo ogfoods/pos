@@ -13,7 +13,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `dashboard.html` | All admins | Cash shift open/close, bento dashboard, awaiting-payment list, **New bill** modal (customer → items → Cash/UPI/Card → receipt) |
 | `managebills.html` | Super admin | Search, view, change status, delete orders, print/WhatsApp receipts |
 | `menu.html` | Super admin | Add / edit / hide / delete menu items, link ingredients to each item |
-| `ingredients.html` | Super admin | Ingredient master list (name + unit) |
+| `ingredients.html` | Super admin | Ingredients, stock (purchase / waste / count), low-stock alerts, history |
 | `usage.html` | Super admin | Ingredients consumed per day (IST), CSV export |
 | `staff.html` | Super admin | Add users, change roles, reset passwords, sign out devices |
 | `settings.html` | Super admin | Shop name, address, phone, UPI ID, currency, receipt footer |

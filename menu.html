@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Modify Menu</title>
-  <link rel="stylesheet" href="css/style.css?v=9" />
+  <link rel="stylesheet" href="css/style.css?v=10" />
 </head>
 <body>
   <header class="topbar">
@@ -86,11 +86,11 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/common.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/common.js?v=10"></script>
   <script>
     const { rpc, money, esc, toast } = App;
-    let me, items = [], recipes = {}, ingredients = [];
+    let me, items = [], recipes = {}, ingredients = [], stock = { items: {} };
     const $ = (id) => document.getElementById(id);
 
     (async () => {
@@ -104,10 +104,11 @@
 
     async function load() {
       try {
-        [items, recipes, ingredients] = await Promise.all([
+        [items, recipes, ingredients, stock] = await Promise.all([
           rpc("list_menu", { p_token: me.token, p_include_inactive: true }),
           rpc("list_menu_recipes", { p_token: me.token }),
           rpc("list_ingredients", { p_token: me.token }),
+          rpc("menu_stock", { p_token: me.token }),
         ]);
         render();
       } catch (err) {
@@ -135,7 +136,10 @@
           <td><button class="btn btn-ghost btn-sm" data-recipe="${i.id}">${
             (recipes[i.id] || []).length ? `${recipes[i.id].length} linked` : "+ Link"
           }</button></td>
-          <td><span class="badge ${i.is_active ? "badge-paid" : ""}">${i.is_active ? "available" : "hidden"}</span></td>
+          <td><span class="badge ${i.is_active ? "badge-paid" : ""}">${i.is_active ? "available" : "hidden"}</span>${
+            (stock.items[i.id] || {}).status === "out" ? ' <span class="badge badge-cancelled">out of stock</span>'
+            : (stock.items[i.id] || {}).status === "low" ? ' <span class="badge badge-pending">low stock</span>' : ""
+          }</td>
           <td><div class="row-actions">
             <button class="btn btn-ghost btn-sm" data-edit="${i.id}">Edit</button>
             <button class="btn btn-danger btn-sm" data-del="${i.id}">Delete</button>

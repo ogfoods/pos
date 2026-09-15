@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shop Settings</title>
-  <link rel="stylesheet" href="css/style.css?v=9" />
+  <link rel="stylesheet" href="css/style.css?v=10" />
 </head>
 <body>
   <header class="topbar">
@@ -49,6 +49,10 @@
           <label for="receipt_footer">Receipt footer</label>
           <input class="input" id="receipt_footer" maxlength="200" placeholder="Thank you! Visit again." />
         </div>
+        <div class="field span-all check-field">
+          <label><input type="checkbox" id="hide_out_of_stock" /> Hide menu items when an ingredient runs out</label>
+          <span class="hint">Applies to ingredients with stock tracking on (Ingredients page). Ticked: out-of-stock items are hidden on New bill and cannot be billed. Unticked: they stay visible with a ⚠ warning and can still be billed; stock goes below zero.</span>
+        </div>
         <div class="form-actions">
           <button class="btn" type="submit" id="save-btn">Save settings</button>
           <button class="btn btn-ghost" type="button" id="test-print">🖨️ Test receipt</button>
@@ -59,8 +63,8 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/common.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/common.js?v=10"></script>
   <script>
     const { rpc, toast, fmtDate } = App;
     const $ = (id) => document.getElementById(id);
@@ -86,6 +90,7 @@
 
     function fill(s) {
       FIELDS.forEach((f) => ($(f).value = (s && s[f]) || ""));
+      $("hide_out_of_stock").checked = !s || s.hide_out_of_stock !== false;
       $("updated").textContent = s && s.updated_at ? `Last saved ${fmtDate(s.updated_at)}` : "";
     }
 
@@ -96,7 +101,7 @@
       try {
         const s = await rpc("update_settings", {
           p_token: me.token,
-          p_settings: Object.fromEntries(FIELDS.map((f) => [f, $(f).value])),
+          p_settings: { ...Object.fromEntries(FIELDS.map((f) => [f, $(f).value])), hide_out_of_stock: $("hide_out_of_stock").checked },
         });
         App.applySettings(s);
         fill(s);

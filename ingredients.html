@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ingredients</title>
-  <link rel="stylesheet" href="css/style.css?v=9" />
+  <link rel="stylesheet" href="css/style.css?v=10" />
 </head>
 <body>
   <header class="topbar">
@@ -16,8 +16,8 @@
   </header>
 
   <main class="container">
-    <h1>Ingredients</h1>
-    <p class="muted">Add everything used to prepare your menu items, then link them to items from the menu page.</p>
+    <h1>Ingredients &amp; stock</h1>
+    <p class="muted">Add everything used to prepare your menu items, link them to items from the menu page, and record stock to track what is left.</p>
 
     <form class="card" id="ing-form" style="margin:1rem 0 1.5rem">
       <h3 id="form-title">Add ingredient</h3>
@@ -50,19 +50,85 @@
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Name</th><th>Unit</th><th>Used in</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Unit</th><th>Used in</th><th class="num">Stock</th><th class="num">Low alert at</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </main>
 
+  <!-- Stock modal -->
+  <div class="modal-backdrop hidden" id="stock-modal" role="dialog" aria-modal="true" aria-labelledby="s-title">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 style="margin:0" id="s-title">Stock</h2>
+          <div class="muted" id="s-current" style="font-size:.9rem"></div>
+        </div>
+        <button class="icon-btn" type="button" id="s-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="s-form">
+          <div class="seg" id="s-kind" role="radiogroup" aria-label="Stock change">
+            <button type="button" role="radio" data-kind="purchase">➕ Purchase</button>
+            <button type="button" role="radio" data-kind="waste">🗑 Waste</button>
+            <button type="button" role="radio" data-kind="count">🔢 Count</button>
+          </div>
+          <div class="field">
+            <label for="s-qty" id="s-qty-label">Quantity bought</label>
+            <div class="qty-unit">
+              <input class="input" id="s-qty" type="number" min="0" step="0.001" inputmode="decimal" required />
+              <span class="muted" id="s-unit"></span>
+            </div>
+            <span class="hint" id="s-preview"></span>
+          </div>
+          <div class="field">
+            <label for="s-note">Note <span class="hint">(optional)</span></label>
+            <input class="input" id="s-note" maxlength="200" placeholder="e.g. supplier bill #, reason for waste" />
+          </div>
+          <button class="btn btn-block" type="submit" id="s-save">Save</button>
+        </form>
+
+        <hr style="border:0;border-top:1px solid var(--border);margin:1.25rem 0" />
+
+        <form id="t-form">
+          <h3 style="font-size:1rem">Tracking</h3>
+          <div class="field check-field" style="margin-bottom:.25rem">
+            <label><input type="checkbox" id="t-track" /> Track stock for this ingredient</label>
+          </div>
+          <p class="hint" style="margin:0 0 .75rem">When on, bills subtract it and menu items show ⚠ or hide when it runs out (see Shop settings). Recording stock turns it on.</p>
+          <div class="field">
+            <label for="t-low">Low stock alert at <span class="hint">(optional)</span></label>
+            <div class="qty-unit">
+              <input class="input" id="t-low" type="number" min="0" step="0.001" inputmode="decimal" placeholder="e.g. 500" />
+              <span class="muted" id="t-unit"></span>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-block" type="submit" id="t-save">Save tracking</button>
+        </form>
+
+        <hr style="border:0;border-top:1px solid var(--border);margin:1.25rem 0" />
+
+        <h3 style="font-size:1rem">History</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Change</th><th class="num">Qty</th><th class="num">After</th><th>By</th></tr></thead>
+            <tbody id="h-rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/common.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/common.js?v=10"></script>
   <script>
-    const { rpc, esc, toast } = App;
+    const { rpc, esc, toast, fmtDate } = App;
     let me, items = [];
+    let stockItem = null; // ingredient open in the stock modal
+    let kind = "purchase";
     const $ = (id) => document.getElementById(id);
+    const fmtQty = (n) => Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 
     (async () => {
       try {
@@ -77,12 +143,24 @@
       try {
         items = await rpc("list_ingredients", { p_token: me.token });
         render();
+        if (stockItem) {
+          stockItem = items.find((x) => x.id === stockItem.id) || null;
+          if (stockItem) renderStockHead();
+        }
       } catch (err) {
         toast(err.message, "error");
       }
     }
 
     $("filter").addEventListener("input", render);
+
+    function stockCell(i) {
+      if (!i.track_stock) return `<span class="muted">Not tracked</span>`;
+      const n = Number(i.stock);
+      const low = i.low_stock_at !== null && n <= Number(i.low_stock_at);
+      const badge = n <= 0 ? ` <span class="badge badge-cancelled">out</span>` : low ? ` <span class="badge badge-pending">low</span>` : "";
+      return `<strong>${fmtQty(n)}</strong> ${esc(i.unit)}${badge}`;
+    }
 
     function render() {
       const q = $("filter").value.trim().toLowerCase();
@@ -95,14 +173,17 @@
           <td><strong>${esc(i.name)}</strong></td>
           <td>${esc(i.unit)}</td>
           <td class="muted">${i.used_count ? `${i.used_count} menu item${i.used_count === 1 ? "" : "s"}` : "Not used"}</td>
+          <td class="num">${stockCell(i)}</td>
+          <td class="num muted">${i.low_stock_at !== null ? `${fmtQty(i.low_stock_at)} ${esc(i.unit)}` : "—"}</td>
           <td><div class="row-actions">
+            <button class="btn btn-sm" data-stock="${i.id}">Stock</button>
             <button class="btn btn-ghost btn-sm" data-edit="${i.id}">Edit</button>
             <button class="btn btn-danger btn-sm" data-del="${i.id}">Delete</button>
           </div></td>
         </tr>`
             )
             .join("")
-        : `<tr><td colspan="4" class="empty">${items.length ? "No matching ingredients." : "No ingredients yet. Add your first one above."}</td></tr>`;
+        : `<tr><td colspan="6" class="empty">${items.length ? "No matching ingredients." : "No ingredients yet. Add your first one above."}</td></tr>`;
     }
 
     function resetForm() {
@@ -119,8 +200,8 @@
       const id = $("ing-id").value ? Number($("ing-id").value) : null;
       const unit = $("ing-unit").value;
       const current = id && items.find((x) => x.id === id);
-      if (current && current.unit !== unit && current.used_count &&
-          !confirm(`"${current.name}" is used in ${current.used_count} menu item(s). Changing the unit does not convert their quantities. Continue?`)) return;
+      if (current && current.unit !== unit && (current.used_count || current.track_stock) &&
+          !confirm(`Changing the unit of “${current.name}” does not convert its recipe quantities or stock. Continue?`)) return;
 
       const btn = $("save-btn");
       btn.disabled = true;
@@ -137,8 +218,10 @@
     });
 
     $("rows").addEventListener("click", async (e) => {
+      const stock = e.target.closest("[data-stock]");
       const edit = e.target.closest("[data-edit]");
       const del = e.target.closest("[data-del]");
+      if (stock) return openStock(Number(stock.dataset.stock));
       if (edit) {
         const i = items.find((x) => x.id === Number(edit.dataset.edit));
         $("ing-id").value = i.id;
@@ -153,7 +236,7 @@
       if (del) {
         const i = items.find((x) => x.id === Number(del.dataset.del));
         const warn = i.used_count ? ` It will be removed from ${i.used_count} menu item recipe(s).` : "";
-        if (!confirm(`Delete “${i.name}”?${warn} Past orders keep their ingredient history.`)) return;
+        if (!confirm(`Delete “${i.name}”?${warn} Its stock history is deleted too. Past orders keep their ingredient history.`)) return;
         try {
           await rpc("delete_ingredient", { p_token: me.token, p_id: i.id });
           toast("Ingredient deleted", "success");
@@ -163,6 +246,134 @@
         }
       }
     });
+
+    // ---------- Stock modal ----------
+    const stockModal = $("stock-modal");
+    const KIND = {
+      purchase: { label: "Quantity bought", apply: (s, q) => s + q },
+      waste: { label: "Quantity wasted", apply: (s, q) => s - q },
+      count: { label: "Counted quantity (actual stock now)", apply: (s, q) => q },
+    };
+    const MOVE = { purchase: "Purchase", waste: "Waste", adjust: "Count", sale: "Bill", sale_reversal: "Bill undone" };
+
+    function openStock(id) {
+      stockItem = items.find((x) => x.id === id);
+      $("s-form").reset();
+      setKind("purchase");
+      renderStockHead();
+      $("h-rows").innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+      stockModal.classList.remove("hidden");
+      loadHistory();
+      $("s-qty").focus();
+    }
+    const closeStock = () => {
+      stockModal.classList.add("hidden");
+      stockItem = null;
+    };
+
+    function renderStockHead() {
+      const i = stockItem;
+      $("s-title").textContent = `Stock · ${i.name}`;
+      $("s-current").innerHTML = i.track_stock ? `Now: ${stockCell(i)}` : "Not tracked yet. Record a purchase or count to start.";
+      $("s-unit").textContent = $("t-unit").textContent = i.unit;
+      $("t-track").checked = i.track_stock;
+      $("t-low").value = i.low_stock_at !== null ? Number(i.low_stock_at) : "";
+      renderPreview();
+    }
+
+    function setKind(k) {
+      kind = k;
+      document.querySelectorAll("#s-kind [data-kind]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.kind === k)));
+      $("s-qty-label").textContent = KIND[k].label;
+      renderPreview();
+    }
+    $("s-kind").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-kind]");
+      if (b) setKind(b.dataset.kind);
+    });
+
+    function renderPreview() {
+      const v = $("s-qty").value;
+      if (!stockItem || v === "") return ($("s-preview").textContent = "");
+      const after = KIND[kind].apply(Number(stockItem.stock), Number(v));
+      $("s-preview").textContent = `Stock after saving: ${fmtQty(after)} ${stockItem.unit}`;
+    }
+    $("s-qty").addEventListener("input", renderPreview);
+
+    $("s-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("s-save");
+      btn.disabled = true;
+      try {
+        await rpc("record_stock", {
+          p_token: me.token,
+          p_ingredient_id: stockItem.id,
+          p_kind: kind,
+          p_qty: Number($("s-qty").value),
+          p_note: $("s-note").value || null,
+        });
+        toast("Stock saved", "success");
+        $("s-form").reset();
+        await load();
+        loadHistory();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("t-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("t-save");
+      btn.disabled = true;
+      try {
+        const low = $("t-low").value;
+        await rpc("update_stock_settings", {
+          p_token: me.token,
+          p_id: stockItem.id,
+          p_track: $("t-track").checked,
+          p_low_stock_at: low === "" ? null : Number(low),
+        });
+        toast("Tracking saved", "success");
+        await load();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    async function loadHistory() {
+      if (!stockItem) return;
+      const id = stockItem.id;
+      try {
+        const rows = await rpc("list_stock_movements", { p_token: me.token, p_ingredient_id: id, p_limit: 50 });
+        if (!stockItem || stockItem.id !== id) return;
+        $("h-rows").innerHTML = rows.length
+          ? rows
+              .map((m) => {
+                const q = Number(m.qty);
+                const billed = m.order_id && (m.kind === "sale" || m.kind === "sale_reversal");
+                const what = billed ? `${MOVE[m.kind]} #${m.order_id}` : MOVE[m.kind] || m.kind;
+                return `<tr>
+                  <td>${fmtDate(m.created_at)}</td>
+                  <td>${esc(what)}${m.note ? `<div class="muted">${esc(m.note)}</div>` : ""}</td>
+                  <td class="num">${q > 0 ? "+" : ""}${fmtQty(q)}</td>
+                  <td class="num">${fmtQty(m.balance_after)}</td>
+                  <td class="muted">${esc(m.username || "—")}</td>
+                </tr>`;
+              })
+              .join("")
+          : `<tr><td colspan="5" class="empty">No stock changes yet.</td></tr>`;
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    $("s-close").addEventListener("click", closeStock);
+    stockModal.addEventListener("click", (e) => { if (e.target === stockModal) closeStock(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !stockModal.classList.contains("hidden")) closeStock(); });
   </script>
 </body>
 </html>

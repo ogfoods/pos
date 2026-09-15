@@ -381,6 +381,22 @@ details.table-view .table-wrap { margin-top: .5rem; max-height: 280px; overflow:
 .bento-card.span-2 { grid-column: span 2; }
 @media (max-width: 460px) { .bento-card.span-2 { grid-column: span 1; } }
 
+/* ---------- Stock ---------- */
+.stock-warn {
+  display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; margin-left: .2rem; padding: 0;
+  border: 0; border-radius: 50%; font-size: .9rem; line-height: 1; cursor: pointer; vertical-align: middle;
+  background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger);
+}
+.stock-warn.low { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+.stock-info { margin-top: .35rem; padding: .45rem .6rem; border-radius: 8px; font-size: .82rem; line-height: 1.4; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.stock-info.low { background: color-mix(in srgb, var(--warning) 13%, transparent); }
+.item-card { flex-wrap: wrap; }
+.item-card > .stock-info { flex-basis: 100%; margin-top: 0; }
+.stock-note { font-size: .85rem; color: var(--muted); margin-bottom: .25rem; }
+.low-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+.low-chip { padding: .35rem .75rem; border-radius: 999px; font-size: .875rem; background: color-mix(in srgb, var(--warning) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent); }
+.low-chip.out { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+
 /* ---------- Kitchen display ---------- */
 .kds-clock { font-weight: 700; font-variant-numeric: tabular-nums; }
 .live-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: .35rem; background: var(--muted); }
