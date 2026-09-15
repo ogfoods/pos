@@ -5,6 +5,8 @@ window.APP_CONFIG = {
   SUPABASE_URL: "https://sprkjslljfsmzgnibdgr.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_pE2xtb_js6B0saOiqrdF9g_Tgd7W145",
 
+  // Fallbacks only: shop name, currency, UPI ID and country code are edited
+  // on the Settings page (settings.html) and stored in the database.
   SHOP_NAME: "My Cafe",
   CURRENCY: "₹",
   // Sample UPI payee used for the payment QR. Replace with the real one.

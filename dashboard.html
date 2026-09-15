@@ -4,13 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=6" />
+  <link rel="stylesheet" href="css/style.css?v=7" />
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
     <div class="topbar-right">
       <span id="who" class="muted"></span>
+      <a class="btn btn-ghost btn-sm" href="account.html">Account</a>
       <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
     </div>
   </header>
@@ -49,6 +50,30 @@
         <div>
           <h2>Ingredient usage</h2>
           <p class="muted">Total ingredients consumed per day (IST), with CSV export.</p>
+        </div>
+      </a>
+      <a class="bento-card super-only" href="staff.html">
+        <span class="badge lock-tag hidden">🔒 Super admin</span>
+        <div class="bento-icon">👥</div>
+        <div>
+          <h2>Staff</h2>
+          <p class="muted">Add users, reset passwords, sign out.</p>
+        </div>
+      </a>
+      <a class="bento-card super-only" href="settings.html">
+        <span class="badge lock-tag hidden">🔒 Super admin</span>
+        <div class="bento-icon">⚙️</div>
+        <div>
+          <h2>Shop settings</h2>
+          <p class="muted">Name, address, UPI ID, receipt.</p>
+        </div>
+      </a>
+      <a class="bento-card super-only" href="audit.html">
+        <span class="badge lock-tag hidden">🔒 Super admin</span>
+        <div class="bento-icon">🕵️</div>
+        <div>
+          <h2>Audit log</h2>
+          <p class="muted">Who changed bills, menu, staff, settings.</p>
         </div>
       </a>
     </div>
@@ -161,8 +186,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=6"></script>
-  <script src="js/common.js?v=6"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/common.js?v=7"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;

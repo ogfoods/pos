@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Staff</title>
+  <link rel="stylesheet" href="css/style.css?v=7" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Staff</h1>
+    <p class="muted">Add cashiers and super admins, reset passwords, and turn off access for people who have left. Disabled users keep their past bills.</p>
+
+    <form class="card" id="user-form" style="margin:1rem 0 1.5rem" autocomplete="off">
+      <h3 id="form-title">Add user</h3>
+      <input type="hidden" id="user-id" />
+      <div class="form-grid-2">
+        <div class="field">
+          <label for="username">Username</label>
+          <input class="input" id="username" maxlength="32" placeholder="e.g. cashier2" required autocapitalize="none" />
+        </div>
+        <div class="field">
+          <label for="role">Role</label>
+          <select class="input" id="role">
+            <option value="admin">Admin (billing only)</option>
+            <option value="super">Super admin (everything)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="password" id="pw-label">Password <span class="hint">(min 8 characters)</span></label>
+          <input class="input" id="password" type="password" minlength="8" autocomplete="new-password" />
+        </div>
+        <div class="field check-field">
+          <label><input type="checkbox" id="active" checked /> Active (can log in)</label>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="save-btn">Add user</button>
+          <button class="btn btn-ghost hidden" type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th class="num">Signed in on</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    const { rpc, esc, toast, fmtDate } = App;
+    const $ = (id) => document.getElementById(id);
+    let me, users = [];
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    async function load() {
+      try {
+        users = await rpc("list_admins", { p_token: me.token });
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    function render() {
+      $("rows").innerHTML = users
+        .map(
+          (u) => `<tr>
+          <td><strong>${esc(u.username)}</strong> ${u.is_me ? `<span class="badge badge-super">you</span>` : ""}</td>
+          <td><span class="badge ${u.role === "super" ? "badge-super" : ""}">${u.role === "super" ? "super admin" : "admin"}</span></td>
+          <td><span class="badge ${u.is_active ? "badge-paid" : "badge-cancelled"}">${u.is_active ? "active" : "disabled"}</span></td>
+          <td class="muted">${u.last_login_at ? fmtDate(u.last_login_at) : "Never"}</td>
+          <td class="num">${u.active_sessions} device${u.active_sessions === 1 ? "" : "s"}</td>
+          <td><div class="row-actions">
+            <button class="btn btn-ghost btn-sm" data-edit="${u.id}">Edit</button>
+            <button class="btn btn-danger btn-sm" data-signout="${u.id}" ${u.active_sessions ? "" : "disabled"}>Sign out</button>
+          </div></td>
+        </tr>`
+        )
+        .join("");
+    }
+
+    function resetForm() {
+      $("user-form").reset();
+      $("user-id").value = "";
+      $("form-title").textContent = "Add user";
+      $("save-btn").textContent = "Add user";
+      $("pw-label").innerHTML = `Password <span class="hint">(min 8 characters)</span>`;
+      $("role").disabled = $("active").disabled = false;
+      $("cancel-btn").classList.add("hidden");
+    }
+    $("cancel-btn").addEventListener("click", resetForm);
+
+    $("user-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = $("user-id").value ? Number($("user-id").value) : null;
+      const password = $("password").value;
+      const current = id && users.find((u) => u.id === id);
+      if (current && !current.is_me && password &&
+          !confirm(`Set a new password for ${current.username}? They will be signed out on all devices.`)) return;
+
+      const btn = $("save-btn");
+      btn.disabled = true;
+      try {
+        await rpc("upsert_admin", {
+          p_token: me.token,
+          p_id: id,
+          p_username: $("username").value,
+          p_role: $("role").value,
+          p_is_active: $("active").checked,
+          p_password: password || null,
+        });
+        toast(id ? "User updated" : "User added", "success");
+        resetForm();
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("rows").addEventListener("click", async (e) => {
+      const edit = e.target.closest("[data-edit]");
+      const out = e.target.closest("[data-signout]");
+      if (edit) {
+        const u = users.find((x) => x.id === Number(edit.dataset.edit));
+        $("user-id").value = u.id;
+        $("username").value = u.username;
+        $("role").value = u.role;
+        $("active").checked = u.is_active;
+        $("password").value = "";
+        // You can't demote or disable yourself.
+        $("role").disabled = $("active").disabled = u.is_me;
+        $("pw-label").innerHTML = `New password <span class="hint">(leave blank to keep)</span>`;
+        $("form-title").textContent = `Edit “${u.username}”`;
+        $("save-btn").textContent = "Save";
+        $("cancel-btn").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        $("username").focus();
+      }
+      if (out) {
+        const u = users.find((x) => x.id === Number(out.dataset.signout));
+        const msg = u.is_me ? "Sign yourself out on all other devices?" : `Sign ${u.username} out on all devices?`;
+        if (!confirm(msg)) return;
+        try {
+          const n = await rpc("revoke_admin_sessions", { p_token: me.token, p_id: u.id });
+          toast(`${n} session(s) signed out`, "success");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+    });
+  </script>
+</body>
+</html>

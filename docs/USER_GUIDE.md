@@ -15,6 +15,8 @@ Live site: https://ogfoods.github.io/pos/
 | Modify menu items | — | ❌ | ✅ |
 | Manage ingredients and link them to items | — | ❌ | ✅ |
 | View ingredient usage report | — | ❌ | ✅ |
+| Manage staff, shop settings, audit log | — | ❌ | ✅ |
+| Change own password | — | ✅ | ✅ |
 
 ---
 
@@ -48,7 +50,7 @@ If nothing appears, check that the number matches the one given at billing.
 - If you are already logged in, opening the login page takes you straight to the dashboard.
 - Click **Logout** (top-right on any admin page) when you finish, especially on a shared device.
 
-Accounts are not created in the app. See [Managing admin accounts](#6-managing-admin-accounts-owner--developer).
+Accounts are created by a super admin on the **Staff** page. See [Staff](#61-staff).
 
 ---
 
@@ -56,7 +58,7 @@ Accounts are not created in the app. See [Managing admin accounts](#6-managing-a
 
 **Page:** `dashboard.html` (opens after login)
 
-The header shows your username and role. The page has four cards:
+The header shows your username and role. The page has these cards:
 
 | Card | What it does | Available to |
 |---|---|---|
@@ -64,6 +66,11 @@ The header shows your username and role. The page has four cards:
 | **Manage bills** | Opens the bill management page | Super admin only |
 | **Modify menu items** | Opens the menu editor | Super admin only |
 | **Ingredient usage** | Opens the ingredient consumption report | Super admin only |
+| **Staff** | Add users, reset passwords, sign people out | Super admin only |
+| **Shop settings** | Shop name, address, UPI ID, receipt text | Super admin only |
+| **Audit log** | History of changes to bills, menu, staff and settings | Super admin only |
+
+**Account** (top right) lets any admin change their own password.
 
 For a normal admin, the super admin cards are greyed out with a 🔒 label, and clicking them shows a message.
 
@@ -107,7 +114,7 @@ UPI bills not yet confirmed appear under **Awaiting payment** on the dashboard (
 ### Printing receipts
 The receipt is laid out for 58 mm thermal paper. In the print dialog choose your receipt printer, set margins to **None**, and turn off headers/footers. On Android with a Bluetooth printer, use a print service app (e.g. RawBT) so it appears in the print dialog.
 
-> The QR currently uses the sample UPI ID from `js/config.js`. Replace `UPI_ID` with your real UPI ID before accepting payments.
+> Set your real UPI ID on the **Shop settings** page before accepting payments. Until then the QR shows a red "Sample UPI ID" warning.
 
 **Tips**
 - Close the window with **×**, the **Esc** key, or by tapping outside it. If items are selected, you will be asked to confirm discarding the bill.
@@ -191,59 +198,82 @@ Notes:
 
 ---
 
-## 6. Managing admin accounts (owner / developer)
+## 6. Staff, settings and audit log (super admin)
 
-Admin accounts are managed directly in Supabase, not in the app.
+### 6.1 Staff
 
-1. Open the Supabase project → **SQL Editor**.
-2. Run the relevant query below.
+**Where:** Dashboard → **Staff** (`staff.html`)
 
-**Add an admin**
+The table shows every user with role, status (active / disabled), last login and how many devices they are signed in on.
+
+| Task | How |
+|---|---|
+| **Add a user** | Enter a **username** (3–32 characters: letters, numbers, `.` `-` `_`; stored in lowercase), pick **Admin** (billing only) or **Super admin** (everything), set a **password** (min 8 characters) and click **Add user**. |
+| **Reset a password** | **Edit** → type a **New password** → **Save**. The user is signed out on all devices. Leave it blank to keep the current password. |
+| **Change a role** | **Edit** → pick the role → **Save**. The user is signed out and gets the new access at next login. |
+| **Disable a user** | **Edit** → untick **Active** → **Save**. They are signed out and cannot log in. Their past bills stay linked to them. |
+| **Sign out everywhere** | **Sign out** on the row (e.g. a lost phone). Your own current session is kept. |
+
+You cannot remove your own super admin role or disable yourself, so there is always at least one super admin.
+
+### 6.2 Shop settings
+
+**Where:** Dashboard → **Shop settings** (`settings.html`)
+
+| Setting | Used for |
+|---|---|
+| **Shop name** | Header on every page, receipts, WhatsApp messages, UPI payee name |
+| **Address**, **Shop phone** | Printed at the top of receipts |
+| **UPI ID** | Where QR payments go (e.g. `myshop@okaxis`). Until it is set, the QR shows a red "Sample UPI ID" warning. |
+| **Currency symbol** | Shown before every amount |
+| **Country code** | Added before 10-digit customer numbers in WhatsApp links (`91` for India) |
+| **Receipt footer** | Last line of receipts and WhatsApp messages |
+
+Click **Save settings**. Other open devices pick up the change when their page is refreshed. **🖨️ Test receipt** prints a sample using the saved settings.
+
+### 6.3 Audit log
+
+**Where:** Dashboard → **Audit log** (`audit.html`)
+
+A record of who did what and when, newest first:
+
+| Area | Recorded |
+|---|---|
+| Orders | Status changes (from → to), payment confirmations, deleted bills (with a full copy of the bill) |
+| Menu | Items added, edited (old → new values), deleted, recipe changes (before / after) |
+| Ingredients | Added, edited, deleted |
+| Staff | Users added or edited, password resets, sign-outs, own password changes |
+| Settings | Every changed field (old → new) |
+
+Filter with the area chips, or search by username, order number or item name. The log cannot be edited or deleted from the app.
+
+### 6.4 My account (all admins)
+
+**Where:** **Account** at the top of the dashboard (`account.html`)
+
+Change your own password: enter the current one, then the new one twice (min 8 characters). You stay signed in on this device; your other devices are signed out.
+
+### 6.5 First super admin (owner / developer)
+
+The very first super admin is created in Supabase → **SQL Editor**; after that, use the Staff page.
+
 ```sql
 insert into public.admins (username, password_hash, role)
-values ('cashier2', crypt('StrongPassword', gen_salt('bf')), 'admin');   -- or 'super'
+values ('owner', crypt('StrongPassword', gen_salt('bf')), 'super');
 ```
 
-**Change a password**
+If every super admin is locked out, reset a password the same way:
+
 ```sql
-update public.admins
-set password_hash = crypt('NewStrongPassword', gen_salt('bf'))
-where username = 'cashier2';
+update public.admins set password_hash = crypt('NewStrongPassword', gen_salt('bf')), is_active = true
+where username = 'owner';
 ```
-
-**Change a role**
-```sql
-update public.admins set role = 'super' where username = 'cashier2';
-```
-
-**Disable an account** (keeps their past bills linked)
-```sql
-update public.admins set is_active = false where username = 'cashier2';
-```
-
-**Sign everyone out immediately**
-```sql
-delete from public.admin_sessions;
-```
-
-Important:
-- Always set passwords with `crypt(..., gen_salt('bf'))`. A plain-text password in `password_hash` will not work.
-- Usernames are not case-sensitive at login.
 
 ---
 
-## 7. Shop settings
+## 7. Technical settings (`js/config.js`)
 
-Edit `js/config.js`, then commit and push:
-
-| Setting | Example | Effect |
-|---|---|---|
-| `SHOP_NAME` | `"OG Foods"` | Header title and UPI payee name |
-| `CURRENCY` | `"₹"` | Symbol shown before amounts |
-| `UPI_ID` | `"ogfoods@okaxis"` | Where QR payments are sent |
-| `COUNTRY_CODE` | `"91"` | Added before the customer's number in WhatsApp receipt links |
-
-GitHub Pages updates in a minute or two. Hard-refresh (Ctrl+Shift+R) to see changes.
+`config.js` holds the Supabase connection (`SUPABASE_URL`, `SUPABASE_ANON_KEY`). Its `SHOP_NAME`, `CURRENCY`, `UPI_ID` and `COUNTRY_CODE` are only fallbacks used before the database settings load; change those on the **Shop settings** page instead.
 
 ---
 
@@ -266,4 +296,6 @@ GitHub Pages updates in a minute or two. Hard-refresh (Ctrl+Shift+R) to see chan
 | New bill shows no items | No available menu items. A super admin must add items or tick **Available**. |
 | QR code not showing | Check the internet connection (the QR library loads from a CDN) and refresh. |
 | Changes not visible after pushing | Wait 1–2 minutes for GitHub Pages, then hard-refresh. |
-| Page shows errors about the database | Check `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `js/config.js` and that `schema.sql` was run. |
+| Page shows errors about the database | Check `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `js/config.js` and that `schema.sql` (or all migrations) was run. |
+| "Too many failed attempts" | Wait the number of minutes shown, or ask a super admin to reset your password on the Staff page. |
+| Shop name / UPI ID not updated on a device | Refresh the page; settings load when a page opens. |

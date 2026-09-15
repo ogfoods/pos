@@ -315,6 +315,17 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 .pending-row .grow { flex: 1; min-width: 10rem; }
 .pending-row .amt { font-weight: 800; }
 
+.qr-warn { margin-top: .4rem; max-width: 200px; font-size: .75rem; font-weight: 600; color: #c92a2a; }
+
+/* ---------- Settings / staff / audit / account ---------- */
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem 1rem; align-items: end; }
+.form-grid-2 .field { margin: 0; }
+.form-grid-2 .span-all { grid-column: 1 / -1; }
+.hint { font-size: .8rem; color: var(--muted); font-weight: 400; }
+.narrow { max-width: 480px; }
+td.wrap { white-space: normal; min-width: 16rem; }
+@media (max-width: 560px) { .form-grid-2 { grid-template-columns: 1fr; } }
+
 /* ---------- Receipt (print only, 58mm) ---------- */
 #receipt-print { display: none; }
 @media print {

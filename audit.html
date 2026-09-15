@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Log</title>
+  <link rel="stylesheet" href="css/style.css?v=7" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Audit log</h1>
+    <p class="muted">Who changed what: bill status and deletions, payment confirmations, menu, recipe and ingredient edits, staff and settings changes.</p>
+
+    <div class="chips-row" id="cats" role="group" aria-label="Filter by area" style="margin-top:1rem"></div>
+    <div class="toolbar">
+      <input class="input" id="q" placeholder="Search user, order #, item name…" />
+      <span class="muted" id="count"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="pager">
+      <button class="btn btn-ghost btn-sm" id="prev">← Prev</button>
+      <span class="muted" id="page-info"></span>
+      <button class="btn btn-ghost btn-sm" id="next">Next →</button>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    const { rpc, money, fmtDate, esc, toast, methodLabel } = App;
+    const $ = (id) => document.getElementById(id);
+    const PAGE = 50;
+    const CATS = [["", "All"], ["order", "Orders"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["settings", "Settings"]];
+    const LABELS = {
+      "order.status": "Bill status changed",
+      "order.paid": "Payment confirmed",
+      "order.delete": "Bill deleted",
+      "menu.create": "Menu item added",
+      "menu.update": "Menu item edited",
+      "menu.delete": "Menu item deleted",
+      "menu.recipe": "Recipe changed",
+      "ingredient.create": "Ingredient added",
+      "ingredient.update": "Ingredient edited",
+      "ingredient.delete": "Ingredient deleted",
+      "staff.create": "User added",
+      "staff.update": "User edited",
+      "staff.sign_out": "User signed out",
+      "staff.password": "Own password changed",
+      "settings.update": "Settings changed",
+    };
+    let me, cat = "", offset = 0, total = 0, rows = [], timer;
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) { renderCats(); load(); }
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    function renderCats() {
+      $("cats").innerHTML = CATS.map(
+        ([k, label]) => `<button type="button" class="chip ${k === cat ? "active" : ""}" data-cat="${k}" aria-pressed="${k === cat}">${label}</button>`
+      ).join("");
+    }
+    $("cats").addEventListener("click", (e) => {
+      const c = e.target.closest("[data-cat]");
+      if (!c) return;
+      cat = c.dataset.cat;
+      offset = 0;
+      renderCats();
+      load();
+    });
+    $("q").addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { offset = 0; load(); }, 300);
+    });
+    $("prev").onclick = () => { offset = Math.max(0, offset - PAGE); load(); };
+    $("next").onclick = () => { offset += PAGE; load(); };
+
+    async function load() {
+      try {
+        const res = await rpc("list_audit_log", {
+          p_token: me.token, p_category: cat || null, p_search: $("q").value, p_limit: PAGE, p_offset: offset,
+        });
+        rows = res.rows;
+        total = res.total_count;
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    const human = (k) => k.replace(/_/g, " ");
+    const fmtQty = (n) => Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+    const fmtVal = (k, v) => {
+      if (v === null || v === undefined || v === "") return "—";
+      if (k === "price" || k === "total") return money(v);
+      if (typeof v === "boolean") return v ? "yes" : "no";
+      if (typeof v === "object") return JSON.stringify(v);
+      return String(v);
+    };
+    const recipe = (list) => (list && list.length ? list.map((r) => `${fmtQty(r.qty)} ${r.unit} ${r.name}`).join(", ") : "none");
+    const itemsText = (items) => (items || []).map((i) => `${i.qty}× ${i.name}`).join(", ");
+    const signedOut = (n) => (n ? `<div class="muted">${n} session(s) signed out</div>` : "");
+
+    function target(r) {
+      const d = r.details || {};
+      const kind = r.action.split(".")[0];
+      if (kind === "order") return `Order #${esc(r.entity_id)}`;
+      if (kind === "settings") return "Shop settings";
+      return esc(d.name || d.username || `#${r.entity_id}`);
+    }
+
+    function details(r) {
+      const d = r.details || {};
+      switch (r.action) {
+        case "order.status":
+          return `${esc(d.from)} → <strong>${esc(d.to)}</strong>`;
+        case "order.paid":
+          return `${esc(methodLabel(d.method))} · ${money(d.total)}`;
+        case "order.delete":
+          return `${esc(d.customer_name || "Customer")} · ${esc(d.phone)} · ${money(d.total)} · ${esc(d.payment_status)}
+            <div class="muted">${esc(itemsText(d.items))}</div>`;
+        case "menu.recipe":
+          return `<span class="muted">Before:</span> ${esc(recipe(d.from))}<br><span class="muted">After:</span> ${esc(recipe(d.to))}`;
+        case "menu.delete":
+          return `${esc(d.category)} · ${money(d.price)}${d.recipe && d.recipe.length ? `<div class="muted">Recipe: ${esc(recipe(d.recipe))}</div>` : ""}`;
+        case "staff.sign_out":
+          return `${d.sessions} session(s) signed out`;
+        case "staff.password":
+          return signedOut(d.sessions_signed_out);
+      }
+      if (d.changes) {
+        return (
+          Object.entries(d.changes)
+            .map(([k, [a, b]]) =>
+              k === "password" ? "password reset" : `${esc(human(k))}: ${esc(fmtVal(k, a))} → <strong>${esc(fmtVal(k, b))}</strong>`
+            )
+            .join("<br>") + signedOut(d.sessions_signed_out)
+        );
+      }
+      return Object.entries(d)
+        .filter(([k]) => k !== "name" && k !== "username")
+        .map(([k, v]) => `${esc(human(k))}: ${esc(fmtVal(k, v))}`)
+        .join(" · ");
+    }
+
+    function render() {
+      $("count").textContent = `${total} entr${total === 1 ? "y" : "ies"}`;
+      const page = Math.floor(offset / PAGE) + 1;
+      $("page-info").textContent = `Page ${page} of ${Math.max(1, Math.ceil(total / PAGE))}`;
+      $("prev").disabled = offset === 0;
+      $("next").disabled = offset + PAGE >= total;
+      $("rows").innerHTML = rows.length
+        ? rows
+            .map(
+              (r) => `<tr>
+            <td>${fmtDate(r.created_at)}</td>
+            <td>${esc(r.admin_username || "—")}</td>
+            <td>${esc(LABELS[r.action] || r.action)}</td>
+            <td>${target(r)}</td>
+            <td class="wrap">${details(r)}</td>
+          </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="5" class="empty">No entries found.</td></tr>`;
+    }
+  </script>
+</body>
+</html>

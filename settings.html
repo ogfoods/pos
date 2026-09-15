@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shop Settings</title>
+  <link rel="stylesheet" href="css/style.css?v=7" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Shop settings</h1>
+    <p class="muted">Shown in the header, on receipts, in WhatsApp messages and in the UPI payment QR. Changes apply on every device after a page refresh.</p>
+
+    <form class="card" id="settings-form" style="margin-top:1rem">
+      <div class="form-grid-2">
+        <div class="field span-all">
+          <label for="shop_name">Shop name *</label>
+          <input class="input" id="shop_name" maxlength="80" required />
+        </div>
+        <div class="field span-all">
+          <label for="shop_address">Address <span class="hint">(printed on receipts)</span></label>
+          <input class="input" id="shop_address" maxlength="200" placeholder="e.g. 12 MG Road, Bengaluru" />
+        </div>
+        <div class="field">
+          <label for="shop_phone">Shop phone <span class="hint">(printed on receipts)</span></label>
+          <input class="input" id="shop_phone" maxlength="20" inputmode="tel" />
+        </div>
+        <div class="field">
+          <label for="upi_id">UPI ID <span class="hint">(payments go here)</span></label>
+          <input class="input" id="upi_id" maxlength="80" placeholder="e.g. myshop@okaxis" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="currency">Currency symbol *</label>
+          <input class="input" id="currency" maxlength="5" required />
+        </div>
+        <div class="field">
+          <label for="country_code">Country code <span class="hint">(for WhatsApp, e.g. 91)</span></label>
+          <input class="input" id="country_code" maxlength="5" inputmode="numeric" />
+        </div>
+        <div class="field span-all">
+          <label for="receipt_footer">Receipt footer</label>
+          <input class="input" id="receipt_footer" maxlength="200" placeholder="Thank you! Visit again." />
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="save-btn">Save settings</button>
+          <button class="btn btn-ghost" type="button" id="test-print">🖨️ Test receipt</button>
+        </div>
+      </div>
+      <p class="muted" id="updated" style="margin:.75rem 0 0;font-size:.85rem"></p>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    const { rpc, toast, fmtDate } = App;
+    const $ = (id) => document.getElementById(id);
+    const FIELDS = ["shop_name", "shop_address", "shop_phone", "currency", "upi_id", "country_code", "receipt_footer"];
+    let me;
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    async function load() {
+      try {
+        fill(await rpc("get_settings"));
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    function fill(s) {
+      FIELDS.forEach((f) => ($(f).value = (s && s[f]) || ""));
+      $("updated").textContent = s && s.updated_at ? `Last saved ${fmtDate(s.updated_at)}` : "";
+    }
+
+    $("settings-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("save-btn");
+      btn.disabled = true;
+      try {
+        const s = await rpc("update_settings", {
+          p_token: me.token,
+          p_settings: Object.fromEntries(FIELDS.map((f) => [f, $(f).value])),
+        });
+        App.applySettings(s);
+        fill(s);
+        toast("Settings saved", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Uses the saved settings, not unsaved edits in the form.
+    $("test-print").addEventListener("click", () =>
+      App.printReceipt({
+        id: 0,
+        created_at: new Date().toISOString(),
+        customer_name: "Test customer",
+        phone: "9876543210",
+        items: [{ name: "Sample item", price: 100, qty: 2 }],
+        total: 200,
+        payment_method: "cash",
+        payment_status: "paid",
+      })
+    );
+  </script>
+</body>
+</html>

@@ -42,10 +42,14 @@ POS_Billing/
 ├── menu.html           Super admin: add / edit / hide / delete menu items, link ingredients
 ├── ingredients.html    Super admin: ingredient master list
 ├── usage.html          Super admin: ingredient usage report (IST days, CSV export)
+├── staff.html          Super admin: users, roles, password resets, sign-outs
+├── settings.html       Super admin: shop name, address, UPI ID, currency, receipt footer
+├── audit.html          Super admin: audit log with area filter and search
+├── account.html        Any admin: change own password
 ├── css/
 │   └── style.css       Shared styles, responsive layout, dark mode
 ├── js/
-│   ├── config.js       Supabase URL + publishable key, shop name, currency, UPI ID
+│   ├── config.js       Supabase URL + publishable key; fallback shop settings
 │   └── common.js       Shared helpers exposed as window.App
 ├── supabase/
 │   └── schema.sql      Tables, RLS, functions, grants (run once in SQL Editor)
@@ -61,6 +65,8 @@ Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `c
 | Helper | Purpose |
 |---|---|
 | `db` | Supabase client created from `APP_CONFIG` |
+| `applySettings(s)` | Merges `get_settings()` into `cfg` (cached in `localStorage` as `pos_settings` for first paint) and updates `[data-shop-name]`. Loaded on every page; `requireAdmin` waits for it |
+| `upiConfigured()` | False while the UPI ID is empty or the sample; `renderQR` then shows a warning |
 | `rpc(fn, args)` | Calls a database function; throws on error; on an expired session (`28000`) clears the session and redirects to login |
 | `session.get/set/clear` | Stores the admin session in `localStorage` (`pos_admin_session`); ignores expired sessions |
 | `requireAdmin({ superOnly })` | Page guard: validates token with `admin_me`, redirects to login or dashboard if not allowed |
@@ -93,6 +99,7 @@ erDiagram
         text password_hash "bcrypt"
         text role "super | admin"
         boolean is_active
+        timestamptz last_login_at
     }
     admin_sessions {
         uuid token PK
@@ -131,7 +138,10 @@ erDiagram
     }
 ```
 
-Ingredient tables (not all columns shown above):
+Other tables (not all columns shown above):
+- `settings` — exactly one row (`id = 1`): shop name, address, phone, currency, UPI ID, country code, receipt footer.
+- `audit_log(admin_id, admin_username snapshot, action, entity_id, details jsonb, created_at)` — `action` is `area.verb` (`order.status`, `menu.update`, `staff.create`, …). Updates store `details.changes = {field: [old, new]}` (built by `_jsonb_diff`); deletes store a snapshot of the row.
+- `login_attempts(username, ip, succeeded, created_at)` — rate-limit window, purged after a day.
 - `ingredients(id, name unique case-insensitive, unit in g|kg|ml|l|pcs)`
 - `menu_item_ingredients(menu_item_id, ingredient_id, qty)` — quantity per **one** unit of the menu item; PK on both IDs.
 - `order_item_ingredients(order_id, order_item_id, ingredient_id nullable, ingredient_name, unit, qty)` — written by `create_order` as recipe qty × ordered qty.
@@ -157,10 +167,11 @@ The Supabase publishable (anon) key is public by design — it is in `config.js`
 2. **Access only through functions.** Functions are `SECURITY DEFINER`: they run as the owner and can touch tables, but only in the ways they are written to. `execute` is granted to `anon` only for the intended functions; the internal `_require_admin` helper is not callable from outside.
 3. **Hashed passwords.** `admins.password_hash` uses bcrypt via `pgcrypto` (`crypt()` + `gen_salt('bf')`). Passwords never leave the database and are never returned to the browser. Empty or null passwords are always rejected.
 4. **Login rate limit.** `admin_login` records every attempt in `login_attempts` (username, client IP from `x-forwarded-for`). 5 failures per username (reset by a success) or 20 per IP within 15 minutes block further attempts. Rows older than a day are purged on each login. Trade-off: someone who knows a username can keep it locked; the IP limit and the short window keep that small.
-5. **Session tokens.** `admin_login` returns a random UUID token valid for 12 hours, stored in `admin_sessions`. Every admin function receives `p_token` and calls `_require_admin(token, super_required)`.
-6. **Roles enforced server-side.** Hiding cards in the UI is cosmetic; super-only functions raise `Super admin access required.` for a normal admin even if called directly.
-7. **Server-side totals.** `create_order` receives only menu item IDs and quantities. Prices come from `menu_items`, and only active items are accepted.
-8. **XSS protection.** All user-supplied text is passed through `App.esc()` before being inserted into HTML.
+5. **Audit trail.** Every super admin change (and payment confirmations) writes to `audit_log` inside the same transaction as the change. The log has no update/delete RPC.
+6. **Session tokens.** `admin_login` returns a random UUID token valid for 12 hours, stored in `admin_sessions`. Every admin function receives `p_token` and calls `_require_admin(token, super_required)`.
+7. **Roles enforced server-side.** Hiding cards in the UI is cosmetic; super-only functions raise `Super admin access required.` for a normal admin even if called directly.
+8. **Server-side totals.** `create_order` receives only menu item IDs and quantities. Prices come from `menu_items`, and only active items are accepted.
+9. **XSS protection.** All user-supplied text is passed through `App.esc()` before being inserted into HTML.
 
 Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone number can see that customer's history (capped at 100 orders, minimum 6 digits). Add OTP verification if this is a concern.
 
@@ -171,6 +182,13 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `admin_login(p_username, p_password)` | Public | Rate-limited (5 failures per username or 20 per IP in 15 min). Returns `{token, username, role, expires_at}` or `{error}` (errors are returned, not raised, so failed attempts are recorded) |
 | `admin_logout(p_token)` | Public | Deletes the session |
 | `admin_me(p_token)` | Any admin | Returns `{username, role}`; used as a page guard |
+| `change_my_password(p_token, p_current, p_new)` | Any admin | Verifies current password, min 8 chars, signs out the user's other sessions; audited |
+| `get_settings()` | Public | Shop settings |
+| `update_settings(p_token, p_settings)` | Super admin | Validates and saves all settings; audited with changed fields |
+| `list_admins(p_token)` | Super admin | Users with last login, active session count, `is_me` |
+| `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
+| `revoke_admin_sessions(p_token, p_id)` | Super admin | Deletes a user's sessions (keeps the caller's); returns count; audited |
+| `list_audit_log(p_token, p_category, p_search, p_limit, p_offset)` | Super admin | Paged log; category = action prefix (`order`, `menu`, `ingredient`, `staff`, `settings`); search matches user, entity ID or details text |
 | `get_orders_by_phone(p_phone)` | Public | Customer order history with items, newest first |
 | `list_menu(p_token, p_include_inactive)` | Any admin (active items); super admin (with hidden items) | Menu sorted by category and name |
 | `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method)` | Any admin | Upserts the customer, creates the order and items, computes the total. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
@@ -255,7 +273,7 @@ Schema changes: update `schema.sql` (for fresh installs) and add a numbered file
 |---|---|
 | `SUPABASE_URL` | Project URL from Supabase → Project Settings → API |
 | `SUPABASE_ANON_KEY` | Publishable/anon key (safe to publish). Never put the `service_role` / secret key here |
-| `SHOP_NAME` | Shown in the header and as the UPI payee name |
+| `SHOP_NAME` | Fallback until `get_settings()` loads (real value is on the Settings page) |
 | `CURRENCY` | Currency symbol used for display |
 | `UPI_ID` | Payee address encoded in the payment QR |
 | `COUNTRY_CODE` | Prefix for 10-digit phone numbers in WhatsApp receipt links (default `91`) |

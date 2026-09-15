@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Account</title>
+  <link rel="stylesheet" href="css/style.css?v=7" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container narrow">
+    <h1>My account</h1>
+    <p class="muted" id="who"></p>
+
+    <form class="card" id="pw-form" style="margin-top:1rem">
+      <h3>Change password</h3>
+      <div class="field">
+        <label for="current">Current password</label>
+        <input class="input" id="current" type="password" autocomplete="current-password" required />
+      </div>
+      <div class="field">
+        <label for="new-pw">New password <span class="hint">(min 8 characters)</span></label>
+        <input class="input" id="new-pw" type="password" minlength="8" autocomplete="new-password" required />
+      </div>
+      <div class="field">
+        <label for="confirm-pw">Confirm new password</label>
+        <input class="input" id="confirm-pw" type="password" minlength="8" autocomplete="new-password" required />
+      </div>
+      <p class="muted" style="font-size:.85rem">You stay signed in here. Other devices using your account are signed out.</p>
+      <button class="btn btn-block" type="submit" id="save-btn">Change password</button>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    const { rpc, esc, toast } = App;
+    const $ = (id) => document.getElementById(id);
+    let me;
+
+    (async () => {
+      try {
+        me = await App.requireAdmin();
+        if (me) $("who").innerHTML = `Signed in as <strong>${esc(me.username)}</strong> · ${me.role === "super" ? "super admin" : "admin"}`;
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    $("pw-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if ($("new-pw").value !== $("confirm-pw").value) return toast("New passwords do not match.", "error");
+      const btn = $("save-btn");
+      btn.disabled = true;
+      try {
+        await rpc("change_my_password", { p_token: me.token, p_current: $("current").value, p_new: $("new-pw").value });
+        $("pw-form").reset();
+        toast("Password changed", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
