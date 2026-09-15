@@ -37,7 +37,7 @@ flowchart LR
 POS_Billing/
 ├── index.html          Public landing page: search order history by phone
 ├── adminlogin.html     Admin login form
-├── dashboard.html      Admin dashboard (bento cards) + 3-step New bill modal
+├── dashboard.html      Admin dashboard: shift bar, bento cards, awaiting payment, New bill modal, shift modal
 ├── managebills.html    Super admin: list / search / status / delete orders
 ├── menu.html           Super admin: add / edit / hide / delete menu items, link ingredients
 ├── ingredients.html    Super admin: ingredient master list
@@ -46,6 +46,7 @@ POS_Billing/
 ├── settings.html       Super admin: shop name, address, UPI ID, currency, receipt footer
 ├── audit.html          Super admin: audit log with area filter and search
 ├── account.html        Any admin: change own password
+├── sales.html          Super admin: sales KPIs, by-day / by-hour bars, methods, top items, staff, shift closes
 ├── css/
 │   └── style.css       Shared styles, responsive layout, dark mode
 ├── js/
@@ -77,6 +78,7 @@ Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `c
 | `methodLabel(m)` | `cash`/`upi`/`card` → display label |
 | `renderQR(el, amount)` | Draws the UPI payment QR for an amount |
 | `printReceipt(order)` | Fills a hidden `#receipt-print` block (58 mm layout, print-only CSS) and opens the print dialog |
+| `printShiftReport(shift)`, `cashDiff(d)` | 58 mm shift report; counted − expected → Short by / Over by / Exact match |
 | `whatsappUrl(order)` | `wa.me` link with the bill summary; prefixes `COUNTRY_CODE` to 10-digit phones |
 
 ## Database design
@@ -141,6 +143,7 @@ erDiagram
 Other tables (not all columns shown above):
 - `settings` — exactly one row (`id = 1`): shop name, address, phone, currency, UPI ID, country code, receipt footer.
 - `audit_log(admin_id, admin_username snapshot, action, entity_id, details jsonb, created_at)` — `action` is `area.verb` (`order.status`, `menu.update`, `staff.create`, …). Updates store `details.changes = {field: [old, new]}` (built by `_jsonb_diff`); deletes store a snapshot of the row.
+- `shifts(admin_id, opened_at, opening_cash, closed_at, closed_by, counted_cash, expected_cash, difference, totals jsonb, note)` — one open shift per admin (partial unique index). Expected cash = opening + that admin's paid cash bills created during the shift; `totals` (cash/upi/card/sales/pending/cancelled) is frozen at close.
 - `login_attempts(username, ip, succeeded, created_at)` — rate-limit window, purged after a day.
 - `ingredients(id, name unique case-insensitive, unit in g|kg|ml|l|pcs)`
 - `menu_item_ingredients(menu_item_id, ingredient_id, qty)` — quantity per **one** unit of the menu item; PK on both IDs.
@@ -189,6 +192,11 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
 | `revoke_admin_sessions(p_token, p_id)` | Super admin | Deletes a user's sessions (keeps the caller's); returns count; audited |
 | `list_audit_log(p_token, p_category, p_search, p_limit, p_offset)` | Super admin | Paged log; category = action prefix (`order`, `menu`, `ingredient`, `staff`, `settings`); search matches user, entity ID or details text |
+| `current_shift(p_token)` | Any admin | Own open shift with live totals and expected cash, or `null` |
+| `open_shift(p_token, p_opening_cash)` | Any admin | Opens a shift; one open shift per user; audited |
+| `close_shift(p_token, p_counted_cash, p_note, p_shift_id?)` | Any admin (own) / super admin (any, by id) | Freezes totals, stores expected/counted/difference; audited |
+| `list_shifts(p_token, p_from, p_to)` | Super admin | Shifts opened between IST dates (max 200) |
+| `sales_report(p_token, p_from, p_to)` | Super admin | IST range (max 1 year): `summary` (paid orders, sales, avg), `pending`, `cancelled`, `by_method`, `by_day` (every day filled), `by_hour` (0–23), `top_items` (top 10 by revenue), `by_staff` |
 | `get_orders_by_phone(p_phone)` | Public | Customer order history with items, newest first |
 | `list_menu(p_token, p_include_inactive)` | Any admin (active items); super admin (with hidden items) | Menu sorted by category and name |
 | `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method)` | Any admin | Upserts the customer, creates the order and items, computes the total. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
@@ -281,4 +289,3 @@ Schema changes: update `schema.sql` (for fresh installs) and add a numbered file
 ## Possible future improvements
 
 - OTP verification for customer order lookup.
-- Sales reports (daily totals, top items).

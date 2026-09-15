@@ -17,6 +17,8 @@ Live site: https://ogfoods.github.io/pos/
 | View ingredient usage report | — | ❌ | ✅ |
 | Manage staff, shop settings, audit log | — | ❌ | ✅ |
 | Change own password | — | ✅ | ✅ |
+| Open / close own cash shift | — | ✅ | ✅ |
+| Sales report and all shifts | — | ❌ | ✅ |
 
 ---
 
@@ -65,12 +67,13 @@ The header shows your username and role. The page has these cards:
 | **New bill** | Opens the billing window | All admins |
 | **Manage bills** | Opens the bill management page | Super admin only |
 | **Modify menu items** | Opens the menu editor | Super admin only |
+| **Sales** | Revenue, busy hours, top items, payment methods, shift closes | Super admin only |
 | **Ingredient usage** | Opens the ingredient consumption report | Super admin only |
 | **Staff** | Add users, reset passwords, sign people out | Super admin only |
 | **Shop settings** | Shop name, address, UPI ID, receipt text | Super admin only |
 | **Audit log** | History of changes to bills, menu, staff and settings | Super admin only |
 
-**Account** (top right) lets any admin change their own password.
+**Account** (top right) lets any admin change their own password. The **shift bar** above the cards opens and closes your cash shift (see [Shifts](#shifts-cash-drawer-count)).
 
 For a normal admin, the super admin cards are greyed out with a 🔒 label, and clicking them shows a message.
 
@@ -110,6 +113,20 @@ The order is saved under the customer's phone number and appears in their histor
 
 ### Awaiting payment
 UPI bills not yet confirmed appear under **Awaiting payment** on the dashboard (refreshes every minute). Click **✓ Received** once the money arrives, or **Receipt** to print. Any admin can confirm payments.
+
+### Shifts (cash drawer count)
+
+The **shift bar** at the top of the dashboard shows whether you have a shift open.
+
+1. **Start of day:** click **Open shift**, count the cash in the drawer and enter it as **Opening cash**.
+2. Bill as usual. The bar shows your **expected cash** so far = opening cash + cash from *your* paid bills.
+3. **End of day:** click **Close shift**. You see opening cash, cash sales, expected cash, UPI, card and total sales. Count the drawer and enter **Cash counted in drawer**; the difference shows live as **Short by**, **Over by** or **Exact match**. Add a note if needed (e.g. cash paid to a vendor) and click **Close shift**.
+4. Click **🖨️ Print shift report** for a 58 mm summary.
+
+Notes:
+- Each user has their own shift; only bills *you* created count toward it.
+- Cancelled bills are not counted as cash. Pending UPI bills are listed as a warning; confirm them before closing if the money has arrived.
+- Opening and closing a shift are recorded in the audit log. Super admins see all shifts on the **Sales** page and can close a shift someone forgot.
 
 ### Printing receipts
 The receipt is laid out for 58 mm thermal paper. In the print dialog choose your receipt printer, set margins to **None**, and turn off headers/footers. On Android with a Bluetooth printer, use a print service app (e.g. RawBT) so it appears in the print dialog.
@@ -196,6 +213,18 @@ Notes:
 - Cancelled orders are excluded. Changing an order to cancelled removes it from the report.
 - The summary shows the number of orders and how many had no ingredient data (items without linked ingredients at billing time). Ranges are limited to one year.
 
+### 5.5 Sales report
+
+**Where:** Dashboard → **Sales** (`sales.html`)
+
+1. Pick a quick range (**Today**, **Yesterday**, **Last 7 days**, **Last 30 days**, **This month**) or set **From** / **To** and click **Show**.
+2. The top tiles show **Sales**, **Average bill**, **Pending** and **Cancelled** totals. Sales and average count paid bills only.
+3. **Sales by day** and **Busy hours** are bar charts. Hover (or tap) a bar for the exact figures, or open **Show as table**.
+4. **Payment methods**, **Top items** (top 10 by revenue) and **By staff** show each share with a bar.
+5. **Shift closes** lists every shift opened in the range with opening, expected and counted cash and the difference. **Print** reprints a shift report; **Close** closes a shift that is still open (you enter the counted cash).
+
+Days and hours follow IST. Bills are dated by when they were created. Ranges are limited to one year.
+
 ---
 
 ## 6. Staff, settings and audit log (super admin)
@@ -243,6 +272,7 @@ A record of who did what and when, newest first:
 | Menu | Items added, edited (old → new values), deleted, recipe changes (before / after) |
 | Ingredients | Added, edited, deleted |
 | Staff | Users added or edited, password resets, sign-outs, own password changes |
+| Shifts | Opened (opening cash), closed (expected, counted, difference) |
 | Settings | Every changed field (old → new) |
 
 Filter with the area chips, or search by username, order number or item name. The log cannot be edited or deleted from the app.

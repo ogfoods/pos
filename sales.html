@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sales</title>
+  <link rel="stylesheet" href="css/style.css?v=8" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Sales</h1>
+    <p class="muted">Days and hours follow IST. Sales, bills and average count <strong>paid</strong> bills only; pending and cancelled are shown separately.</p>
+
+    <form class="card" id="filters" style="margin-top:1rem">
+      <div class="chips-row" role="group" aria-label="Quick ranges">
+        <button type="button" class="chip" data-range="today">Today</button>
+        <button type="button" class="chip" data-range="yesterday">Yesterday</button>
+        <button type="button" class="chip" data-range="7">Last 7 days</button>
+        <button type="button" class="chip" data-range="30">Last 30 days</button>
+        <button type="button" class="chip" data-range="month">This month</button>
+      </div>
+      <div class="usage-grid">
+        <div class="field">
+          <label for="from">From</label>
+          <input class="input" id="from" type="date" required />
+        </div>
+        <div class="field">
+          <label for="to">To</label>
+          <input class="input" id="to" type="date" required />
+        </div>
+        <div class="usage-actions">
+          <button class="btn" type="submit" id="run">Show</button>
+        </div>
+      </div>
+    </form>
+
+    <p class="muted" id="range-label" style="margin:1rem 0 0"></p>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="panels">
+      <section class="card full">
+        <div class="panel-title"><h2>Sales by day</h2><span class="chart-note" id="day-note"></span></div>
+        <div id="by-day"></div>
+      </section>
+      <section class="card">
+        <div class="panel-title"><h2>Busy hours</h2><span class="chart-note">Paid bills per hour</span></div>
+        <div id="by-hour"></div>
+      </section>
+      <section class="card">
+        <div class="panel-title"><h2>Payment methods</h2></div>
+        <div id="by-method"></div>
+      </section>
+      <section class="card">
+        <div class="panel-title"><h2>Top items</h2><span class="chart-note">By revenue</span></div>
+        <div id="top-items"></div>
+      </section>
+      <section class="card">
+        <div class="panel-title"><h2>By staff</h2></div>
+        <div id="by-staff"></div>
+      </section>
+    </div>
+
+    <section>
+      <div class="section-head"><h2>Shift closes</h2><span class="muted" id="shift-count"></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cashier</th><th>Opened</th><th>Closed</th><th class="num">Opening</th><th class="num">Expected</th><th class="num">Counted</th><th class="num">Difference</th><th>Note</th><th></th></tr></thead>
+          <tbody id="shift-rows"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/common.js?v=8"></script>
+  <script>
+    const { rpc, money, esc, toast, fmtDate, methodLabel, cashDiff } = App;
+    const $ = (id) => document.getElementById(id);
+    const TZ = "Asia/Kolkata";
+    let me, report = null, shifts = [];
+
+    const istDate = (d) => d.toLocaleDateString("en-CA", { timeZone: TZ });
+    const addDays = (ymd, n) => {
+      const d = new Date(ymd + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const fmtDay = (ymd) =>
+      new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    const fmtShort = (ymd) => new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { timeZone: "UTC", day: "numeric", month: "short" });
+    const fmtHour = (h) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+    const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    const pct = (part, whole) => (whole ? Math.round((part / whole) * 100) : 0);
+
+    function setRange(kind) {
+      const today = istDate(new Date());
+      let from = today, to = today;
+      if (kind === "yesterday") from = to = addDays(today, -1);
+      else if (kind === "7") from = addDays(today, -6);
+      else if (kind === "30") from = addDays(today, -29);
+      else if (kind === "month") from = today.slice(0, 8) + "01";
+      $("from").value = from;
+      $("to").value = to;
+      document.querySelectorAll("[data-range]").forEach((c) => c.classList.toggle("active", c.dataset.range === kind));
+    }
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (!me) return;
+        $("from").max = $("to").max = istDate(new Date());
+        setRange("today");
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    document.querySelector(".chips-row").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-range]");
+      if (!chip) return;
+      setRange(chip.dataset.range);
+      load();
+    });
+    ["from", "to"].forEach((id) =>
+      $(id).addEventListener("change", () => document.querySelectorAll("[data-range]").forEach((c) => c.classList.remove("active")))
+    );
+    $("filters").addEventListener("submit", (e) => { e.preventDefault(); load(); });
+
+    async function load() {
+      const from = $("from").value, to = $("to").value;
+      if (!from || !to) return toast("Choose both dates.", "error");
+      if (to < from) return toast("End date must be on or after start date.", "error");
+      $("run").disabled = true;
+      try {
+        [report, shifts] = await Promise.all([
+          rpc("sales_report", { p_token: me.token, p_from: from, p_to: to }),
+          rpc("list_shifts", { p_token: me.token, p_from: from, p_to: to }),
+        ]);
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        $("run").disabled = false;
+      }
+    }
+
+    // ---------- Chart: single-series bars with hover/focus tooltip and a table view ----------
+    function barChart(box, rows, { value, label, tip, columns, emptyText }) {
+      const max = Math.max(0, ...rows.map(value));
+      if (!max) {
+        box.innerHTML = `<div class="empty">${emptyText}</div>`;
+        return;
+      }
+      const every = Math.ceil(rows.length / 12);
+      box.innerHTML = `
+        <div class="bars">
+          ${rows
+            .map(
+              (r, i) => `<div class="bar-col" tabindex="0" data-i="${i}" aria-label="${esc(tip(r))}">
+                <div class="bar" style="height:${((value(r) / max) * 100).toFixed(2)}%"></div>
+              </div>`
+            )
+            .join("")}
+          <div class="chart-tip" hidden></div>
+        </div>
+        <div class="bar-axis" aria-hidden="true">${rows.map((r, i) => `<span>${i % every === 0 ? esc(label(r)) : ""}</span>`).join("")}</div>
+        <details class="table-view">
+          <summary>Show as table</summary>
+          <div class="table-wrap"><table>
+            <thead><tr>${columns.map((c) => `<th class="${c.num ? "num" : ""}">${c.head}</th>`).join("")}</tr></thead>
+            <tbody>${rows.map((r) => `<tr>${columns.map((c) => `<td class="${c.num ? "num" : ""}">${c.cell(r)}</td>`).join("")}</tr>`).join("")}</tbody>
+          </table></div>
+        </details>`;
+
+      const bars = box.querySelector(".bars");
+      const tipEl = box.querySelector(".chart-tip");
+      const show = (col) => {
+        tipEl.textContent = tip(rows[col.dataset.i]);
+        tipEl.hidden = false;
+        const half = tipEl.offsetWidth / 2;
+        const center = col.offsetLeft + col.offsetWidth / 2;
+        tipEl.style.left = `${Math.min(Math.max(center, half), bars.clientWidth - half)}px`;
+        tipEl.style.top = `${col.offsetHeight - col.firstElementChild.offsetHeight}px`;
+      };
+      const hide = () => (tipEl.hidden = true);
+      bars.addEventListener("pointerover", (e) => { const c = e.target.closest(".bar-col"); if (c) show(c); });
+      bars.addEventListener("focusin", (e) => { const c = e.target.closest(".bar-col"); if (c) show(c); });
+      bars.addEventListener("pointerleave", hide);
+      bars.addEventListener("focusout", hide);
+    }
+
+    // Rows with a label, value text and a proportional bar.
+    const shareRows = (rows, whole) =>
+      rows
+        .map(
+          (r) => `<div class="share-row">
+            <span>${r.label}</span><span class="muted">${r.value}</span>
+            <div class="share-track"><div class="share-fill" style="width:${pct(r.amount, whole)}%"></div></div>
+          </div>`
+        )
+        .join("");
+
+    function render() {
+      const { summary, pending, cancelled, by_day, by_hour, by_method, top_items, by_staff, from, to } = report;
+      const sales = Number(summary.sales);
+      $("range-label").innerHTML = `<strong>${esc(from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`)}</strong>`;
+
+      const kpi = (label, value, sub) =>
+        `<div class="card kpi"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div>`;
+      $("kpis").innerHTML =
+        kpi("Sales", money(sales), plural(summary.orders, "paid bill")) +
+        kpi("Average bill", money(summary.avg), "per paid bill") +
+        kpi("Pending", money(pending.total), plural(pending.orders, "bill") + " awaiting payment") +
+        kpi("Cancelled", money(cancelled.total), plural(cancelled.orders, "bill"));
+
+      // Sales by day
+      $("day-note").textContent = by_day.length > 1 ? "Hover a bar for details" : "";
+      if (by_day.length === 1) {
+        $("by-day").innerHTML = `<div class="empty">One day selected. Pick a longer range (e.g. Last 7 days) to compare days.</div>`;
+      } else barChart($("by-day"), by_day, {
+        value: (d) => Number(d.total),
+        label: (d) => fmtShort(d.day),
+        tip: (d) => `${fmtDay(d.day)}: ${money(d.total)} · ${plural(d.orders, "bill")}`,
+        columns: [
+          { head: "Date", cell: (d) => esc(fmtDay(d.day)) },
+          { head: "Paid bills", num: true, cell: (d) => d.orders },
+          { head: "Sales", num: true, cell: (d) => money(d.total) },
+        ],
+        emptyText: "No paid bills in this period.",
+      });
+
+      // Busy hours: trim to the hours that had sales
+      const active = by_hour.filter((h) => h.orders > 0);
+      const hours = active.length ? by_hour.slice(active[0].hour, active[active.length - 1].hour + 1) : [];
+      barChart($("by-hour"), hours, {
+        value: (h) => h.orders,
+        label: (h) => fmtHour(h.hour),
+        tip: (h) => `${fmtHour(h.hour)}–${fmtHour((h.hour + 1) % 24)}: ${plural(h.orders, "bill")} · ${money(h.total)}`,
+        columns: [
+          { head: "Hour", cell: (h) => `${fmtHour(h.hour)}–${fmtHour((h.hour + 1) % 24)}` },
+          { head: "Paid bills", num: true, cell: (h) => h.orders },
+          { head: "Sales", num: true, cell: (h) => money(h.total) },
+        ],
+        emptyText: "No paid bills in this period.",
+      });
+
+      $("by-method").innerHTML = by_method.length
+        ? shareRows(
+            by_method.map((m) => ({
+              label: `<strong>${esc(m.method === "unknown" ? "Not recorded" : methodLabel(m.method))}</strong>`,
+              value: `${money(m.total)} · ${plural(m.orders, "bill")} · ${pct(m.total, sales)}%`,
+              amount: Number(m.total),
+            })),
+            sales
+          )
+        : `<div class="empty">No paid bills in this period.</div>`;
+
+      const topMax = top_items.length ? Number(top_items[0].revenue) : 0;
+      $("top-items").innerHTML = top_items.length
+        ? shareRows(
+            top_items.map((i, n) => ({
+              label: `<span class="muted">${n + 1}.</span> <strong>${esc(i.name)}</strong>`,
+              value: `${i.qty} sold · ${money(i.revenue)}`,
+              amount: Number(i.revenue),
+            })),
+            topMax
+          )
+        : `<div class="empty">No items sold in this period.</div>`;
+
+      $("by-staff").innerHTML = by_staff.length
+        ? shareRows(
+            by_staff.map((s) => ({
+              label: `<strong>${esc(s.username)}</strong>`,
+              value: `${money(s.total)} · ${plural(s.orders, "bill")}`,
+              amount: Number(s.total),
+            })),
+            sales
+          )
+        : `<div class="empty">No paid bills in this period.</div>`;
+
+      renderShifts();
+    }
+
+    function renderShifts() {
+      $("shift-count").textContent = plural(shifts.length, "shift");
+      $("shift-rows").innerHTML = shifts.length
+        ? shifts
+            .map((s) => {
+              const d = cashDiff(s.difference);
+              return `<tr>
+                <td><strong>${esc(s.username || "—")}</strong></td>
+                <td>${fmtDate(s.opened_at)}</td>
+                <td>${s.is_open ? `<span class="badge badge-pending">open</span>` : `${fmtDate(s.closed_at)}${s.closed_by && s.closed_by !== s.username ? `<div class="muted">by ${esc(s.closed_by)}</div>` : ""}`}</td>
+                <td class="num">${money(s.opening_cash)}</td>
+                <td class="num">${money(s.expected_cash)}${s.is_open ? `<div class="muted">so far</div>` : ""}</td>
+                <td class="num">${s.is_open ? "—" : money(s.counted_cash)}</td>
+                <td class="num">${s.is_open ? "—" : `<span class="${d.cls}">${d.label === "Exact match" ? "Exact" : `${d.label === "Short by" ? "Short" : "Over"} ${money(Math.abs(s.difference))}`}</span>`}</td>
+                <td class="muted">${esc(s.note || "")}</td>
+                <td><div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" data-print="${s.id}">Print</button>
+                  ${s.is_open ? `<button class="btn btn-danger btn-sm" data-close="${s.id}">Close</button>` : ""}
+                </div></td>
+              </tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="9" class="empty">No shifts opened in this period.</td></tr>`;
+    }
+
+    $("shift-rows").addEventListener("click", async (e) => {
+      const print = e.target.closest("[data-print]");
+      const close = e.target.closest("[data-close]");
+      if (print) return App.printShiftReport(shifts.find((s) => s.id === Number(print.dataset.print)));
+      if (!close) return;
+      const s = shifts.find((x) => x.id === Number(close.dataset.close));
+      const input = prompt(`Close ${s.username}'s shift.\nExpected cash so far: ${money(s.expected_cash)}\n\nCash counted in the drawer:`);
+      if (input === null) return;
+      const counted = Number(input.replace(/[^\d.]/g, ""));
+      if (input.trim() === "" || Number.isNaN(counted)) return toast("Enter the counted cash as a number.", "error");
+      try {
+        await rpc("close_shift", { p_token: me.token, p_counted_cash: counted, p_note: "Closed by super admin", p_shift_id: s.id });
+        toast("Shift closed", "success");
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+  </script>
+</body>
+</html>

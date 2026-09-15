@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Audit Log</title>
-  <link rel="stylesheet" href="css/style.css?v=7" />
+  <link rel="stylesheet" href="css/style.css?v=8" />
 </head>
 <body>
   <header class="topbar">
@@ -17,7 +17,7 @@
 
   <main class="container">
     <h1>Audit log</h1>
-    <p class="muted">Who changed what: bill status and deletions, payment confirmations, menu, recipe and ingredient edits, staff and settings changes.</p>
+    <p class="muted">Who changed what: bill status and deletions, payment confirmations, menu, recipe and ingredient edits, staff, shift and settings changes.</p>
 
     <div class="chips-row" id="cats" role="group" aria-label="Filter by area" style="margin-top:1rem"></div>
     <div class="toolbar">
@@ -40,13 +40,13 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=7"></script>
-  <script src="js/common.js?v=7"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/common.js?v=8"></script>
   <script>
     const { rpc, money, fmtDate, esc, toast, methodLabel } = App;
     const $ = (id) => document.getElementById(id);
     const PAGE = 50;
-    const CATS = [["", "All"], ["order", "Orders"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["settings", "Settings"]];
+    const CATS = [["", "All"], ["order", "Orders"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["shift", "Shifts"], ["settings", "Settings"]];
     const LABELS = {
       "order.status": "Bill status changed",
       "order.paid": "Payment confirmed",
@@ -63,6 +63,8 @@
       "staff.sign_out": "User signed out",
       "staff.password": "Own password changed",
       "settings.update": "Settings changed",
+      "shift.open": "Shift opened",
+      "shift.close": "Shift closed",
     };
     let me, cat = "", offset = 0, total = 0, rows = [], timer;
 
@@ -126,6 +128,7 @@
       const kind = r.action.split(".")[0];
       if (kind === "order") return `Order #${esc(r.entity_id)}`;
       if (kind === "settings") return "Shop settings";
+      if (kind === "shift") return `Shift #${esc(r.entity_id)} · ${esc(d.username || "")}`;
       return esc(d.name || d.username || `#${r.entity_id}`);
     }
 
@@ -143,6 +146,12 @@
           return `<span class="muted">Before:</span> ${esc(recipe(d.from))}<br><span class="muted">After:</span> ${esc(recipe(d.to))}`;
         case "menu.delete":
           return `${esc(d.category)} · ${money(d.price)}${d.recipe && d.recipe.length ? `<div class="muted">Recipe: ${esc(recipe(d.recipe))}</div>` : ""}`;
+        case "shift.open":
+          return `Opening cash ${money(d.opening_cash)}`;
+        case "shift.close": {
+          const c = App.cashDiff(d.difference);
+          return `Expected ${money(d.expected_cash)} · counted ${money(d.counted_cash)} · <span class="${c.cls}">${c.label}${c.label === "Exact match" ? "" : ` ${money(Math.abs(d.difference))}`}</span>`;
+        }
         case "staff.sign_out":
           return `${d.sessions} session(s) signed out`;
         case "staff.password":

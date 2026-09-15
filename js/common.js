@@ -173,16 +173,59 @@
       <div class="rc-center">${esc(cfg.RECEIPT_FOOTER || "Thank you! Visit again.")}</div>`;
   }
 
-  function printReceipt(o) {
+  // Prints only `html` (see #receipt-print in style.css).
+  function printHtml(html) {
     let box = document.getElementById("receipt-print");
     if (!box) {
       box = document.createElement("div");
       box.id = "receipt-print";
       document.body.appendChild(box);
     }
-    box.innerHTML = receiptHtml(o);
+    box.innerHTML = html;
     window.print();
   }
+
+  const printReceipt = (o) => printHtml(receiptHtml(o));
+
+  // Counted minus expected cash -> label + CSS class.
+  function cashDiff(d) {
+    const n = Number(d || 0);
+    if (Math.abs(n) < 0.005) return { label: "Exact match", cls: "diff-ok" };
+    return n < 0 ? { label: "Short by", cls: "diff-short" } : { label: "Over by", cls: "diff-over" };
+  }
+
+  // End-of-shift cash report (58mm). `s` is a shift from open_shift / close_shift / current_shift.
+  function shiftReportHtml(s) {
+    const t = s.totals || {};
+    const row = (label, value, cls = "") => `<div class="rc-row ${cls}"><span>${label}</span><span>${value}</span></div>`;
+    const counted =
+      s.counted_cash == null
+        ? ""
+        : row("Counted cash", money(s.counted_cash), "rc-total") +
+          row(cashDiff(s.difference).label, money(Math.abs(Number(s.difference))), "rc-total");
+    return `
+      <div class="rc-center rc-shop">${esc(cfg.SHOP_NAME)}</div>
+      <div class="rc-center">SHIFT REPORT #${s.id}</div>
+      <hr>
+      ${row("Cashier", esc(s.username || "—"))}
+      ${row("Opened", fmtDate(s.opened_at))}
+      ${row("Closed", s.closed_at ? fmtDate(s.closed_at) : "still open")}
+      <hr>
+      ${row("Opening cash", money(s.opening_cash))}
+      ${row("Cash sales", money(t.cash))}
+      ${row("Expected cash", money(s.expected_cash), "rc-total")}
+      ${counted}
+      <hr>
+      ${row("UPI", money(t.upi))}
+      ${row("Card", money(t.card))}
+      ${row("Total sales", money(t.sales))}
+      ${row("Paid bills", t.orders ?? 0)}
+      ${row("Pending", `${t.pending_count ?? 0} · ${money(t.pending_total)}`)}
+      ${row("Cancelled", `${t.cancelled_count ?? 0} · ${money(t.cancelled_total)}`)}
+      ${s.note ? `<hr><div>Note: ${esc(s.note)}</div>` : ""}`;
+  }
+
+  const printShiftReport = (s) => printHtml(shiftReportHtml(s));
 
   // wa.me link with the bill summary, addressed to the customer's phone.
   function whatsappUrl(o) {
@@ -205,5 +248,6 @@
   window.App = {
     cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems,
     methodLabel, renderQR, printReceipt, whatsappUrl, applySettings, upiConfigured,
+    printHtml, printShiftReport, cashDiff,
   };
 })();

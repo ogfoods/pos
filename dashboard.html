@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="css/style.css?v=7" />
+  <link rel="stylesheet" href="css/style.css?v=8" />
 </head>
 <body>
   <header class="topbar">
@@ -19,6 +19,14 @@
   <main class="container">
     <h1 id="greeting">Dashboard</h1>
     <p class="muted" style="margin-bottom:1.5rem">What would you like to do?</p>
+
+    <section class="card shift-bar" id="shift-bar">
+      <div class="grow">
+        <strong><span class="shift-dot" aria-hidden="true"></span><span id="shift-bar-title">Shift</span></strong>
+        <div class="muted" id="shift-bar-sub"></div>
+      </div>
+      <button class="btn btn-sm" type="button" id="shift-bar-btn">Open shift</button>
+    </section>
 
     <div class="bento">
       <button class="bento-card primary" id="card-new-bill" type="button">
@@ -44,7 +52,15 @@
           <p class="muted">Add, edit, price and hide items.</p>
         </div>
       </a>
-      <a class="bento-card wide super-only" href="usage.html">
+      <a class="bento-card span-2 super-only" href="sales.html">
+        <span class="badge lock-tag hidden">🔒 Super admin</span>
+        <div class="bento-icon">📈</div>
+        <div>
+          <h2>Sales</h2>
+          <p class="muted">Revenue, busy hours, top items, payment methods, shift closes.</p>
+        </div>
+      </a>
+      <a class="bento-card super-only" href="usage.html">
         <span class="badge lock-tag hidden">🔒 Super admin</span>
         <div class="bento-icon">📊</div>
         <div>
@@ -87,6 +103,48 @@
       <div class="pending-list" id="pending-list"></div>
     </section>
   </main>
+
+  <!-- Shift open / close modal -->
+  <div class="modal-backdrop hidden" id="shift-modal" role="dialog" aria-modal="true" aria-labelledby="shift-title">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 style="margin:0" id="shift-title">Shift</h2>
+        <button class="icon-btn" type="button" id="shift-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="shift-open-form" class="hidden">
+          <p class="muted">Count the cash in the drawer before you start billing.</p>
+          <div class="field">
+            <label for="opening-cash">Opening cash</label>
+            <input class="input" id="opening-cash" type="number" min="0" step="0.01" inputmode="decimal" required />
+          </div>
+          <button class="btn btn-block" type="submit">Open shift</button>
+        </form>
+
+        <form id="shift-close-form" class="hidden">
+          <p class="muted" id="shift-since"></p>
+          <ul class="summary-list" id="shift-live"></ul>
+          <div class="field" style="margin-top:1rem">
+            <label for="counted-cash">Cash counted in drawer</label>
+            <input class="input" id="counted-cash" type="number" min="0" step="0.01" inputmode="decimal" required />
+          </div>
+          <p id="shift-diff" style="margin-top:0"></p>
+          <div class="field">
+            <label for="shift-note">Note <span class="hint">(optional)</span></label>
+            <input class="input" id="shift-note" maxlength="200" placeholder="e.g. paid ₹100 to vendor from drawer" />
+          </div>
+          <button class="btn btn-block" type="submit">Close shift</button>
+        </form>
+
+        <div id="shift-done" class="hidden">
+          <ul class="summary-list" id="shift-summary"></ul>
+          <div class="done-actions">
+            <button class="btn btn-block" type="button" id="shift-print">🖨️ Print shift report</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- New bill modal -->
   <div class="modal-backdrop bill-backdrop hidden" id="bill-modal" role="dialog" aria-modal="true" aria-labelledby="bill-title">
@@ -186,8 +244,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=7"></script>
-  <script src="js/common.js?v=7"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/common.js?v=8"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -217,7 +275,8 @@
           });
         }
         loadPending();
-        setInterval(() => { if (!document.hidden) loadPending(); }, 60000);
+        loadShift();
+        setInterval(() => { if (!document.hidden) { loadPending(); loadShift(); } }, 60000);
       } catch (err) {
         toast(err.message, "error");
       }
@@ -264,11 +323,132 @@
         const o = await rpc("mark_order_paid", { p_token: me.token, p_id: Number(paid.dataset.paid) });
         toast(`Order #${o.id} marked paid`, "success");
         loadPending();
+        loadShift();
       } catch (err) {
         toast(err.message, "error");
         paid.disabled = false;
       }
     });
+
+    // ---------- Shift ----------
+    let shift = null; // my open shift (live totals) or null
+    let closedShift = null;
+    const shiftModal = document.getElementById("shift-modal");
+    const el = (id) => document.getElementById(id);
+
+    async function loadShift() {
+      try {
+        shift = await rpc("current_shift", { p_token: me.token });
+        renderShiftBar();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    function renderShiftBar() {
+      el("shift-bar").classList.toggle("open", !!shift);
+      if (shift) {
+        el("shift-bar-title").textContent = "Shift open";
+        el("shift-bar-sub").textContent =
+          `Since ${fmtDate(shift.opened_at)} · expected cash ${money(shift.expected_cash)} · ${shift.totals.orders} paid bill${shift.totals.orders === 1 ? "" : "s"}`;
+        el("shift-bar-btn").textContent = "Close shift";
+      } else {
+        el("shift-bar-title").textContent = "No shift open";
+        el("shift-bar-sub").textContent = "Open a shift with your drawer cash, then close it at the end to check the count.";
+        el("shift-bar-btn").textContent = "Open shift";
+      }
+    }
+
+    function shiftRows(s, closed) {
+      const t = s.totals || {};
+      const li = (a, b, cls = "") => `<li class="${cls}"><span>${a}</span><span>${b}</span></li>`;
+      let html = li("Opening cash", money(s.opening_cash)) + li("Cash sales", money(t.cash)) + li("Expected cash in drawer", money(s.expected_cash), "strong");
+      if (closed) {
+        const d = App.cashDiff(s.difference);
+        html += li("Counted cash", money(s.counted_cash), "strong") + li(d.label, `<span class="${d.cls}">${money(Math.abs(Number(s.difference)))}</span>`, "strong");
+      }
+      html += li("UPI", money(t.upi)) + li("Card", money(t.card)) + li("Total sales", `${money(t.sales)} · ${t.orders} bill${t.orders === 1 ? "" : "s"}`);
+      if (t.pending_count) html += li("⚠ Still pending (UPI)", `${t.pending_count} · ${money(t.pending_total)}`);
+      if (t.cancelled_count) html += li("Cancelled", `${t.cancelled_count} · ${money(t.cancelled_total)}`);
+      return html;
+    }
+
+    function showShiftPane(id, title) {
+      ["shift-open-form", "shift-close-form", "shift-done"].forEach((p) => el(p).classList.toggle("hidden", p !== id));
+      el("shift-title").textContent = title;
+      shiftModal.classList.remove("hidden");
+    }
+    const closeShiftModal = () => shiftModal.classList.add("hidden");
+
+    el("shift-bar-btn").addEventListener("click", async () => {
+      await loadShift();
+      if (!shift) {
+        el("opening-cash").value = "";
+        showShiftPane("shift-open-form", "Open shift");
+        el("opening-cash").focus();
+      } else {
+        el("shift-since").textContent = `Opened ${fmtDate(shift.opened_at)}`;
+        el("shift-live").innerHTML = shiftRows(shift, false);
+        el("counted-cash").value = "";
+        el("shift-note").value = "";
+        el("shift-diff").innerHTML = "";
+        showShiftPane("shift-close-form", "Close shift");
+        el("counted-cash").focus();
+      }
+    });
+    el("shift-close").addEventListener("click", closeShiftModal);
+    shiftModal.addEventListener("click", (e) => { if (e.target === shiftModal) closeShiftModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !shiftModal.classList.contains("hidden")) closeShiftModal(); });
+
+    el("counted-cash").addEventListener("input", () => {
+      const v = el("counted-cash").value;
+      if (v === "" || !shift) return (el("shift-diff").innerHTML = "");
+      const diff = Number(v) - Number(shift.expected_cash);
+      const d = App.cashDiff(diff);
+      el("shift-diff").innerHTML = `<span class="${d.cls}">${d.label}${d.label === "Exact match" ? "" : ` ${money(Math.abs(diff))}`}</span>`;
+    });
+
+    el("shift-open-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = e.currentTarget.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        shift = await rpc("open_shift", { p_token: me.token, p_opening_cash: Number(el("opening-cash").value) });
+        renderShiftBar();
+        closeShiftModal();
+        toast("Shift opened", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    el("shift-close-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const pendingCount = shift && shift.totals.pending_count;
+      if (pendingCount && !confirm(`${pendingCount} UPI bill(s) are still pending. Close the shift anyway?`)) return;
+      const btn = e.currentTarget.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        closedShift = await rpc("close_shift", {
+          p_token: me.token,
+          p_counted_cash: Number(el("counted-cash").value),
+          p_note: el("shift-note").value || null,
+        });
+        shift = null;
+        renderShiftBar();
+        el("shift-summary").innerHTML = shiftRows(closedShift, true);
+        showShiftPane("shift-done", "Shift closed");
+        toast("Shift closed", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    el("shift-print").addEventListener("click", () => closedShift && App.printShiftReport(closedShift));
 
     // ---------- Modal ----------
     const modal = document.getElementById("bill-modal");
@@ -488,6 +668,7 @@
         showStep(3);
         toast(`Order #${saved.id} saved · ${money(saved.total)}`, "success");
         if (saved.payment_status === "pending") loadPending();
+        loadShift();
       } catch (err) {
         toast(err.message, "error");
         nextBtn.disabled = false;
@@ -523,6 +704,7 @@
         renderSaved();
         toast(`Order #${saved.id} marked paid`, "success");
         loadPending();
+        loadShift();
       } catch (err) {
         toast(err.message, "error");
       } finally {

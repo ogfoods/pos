@@ -10,7 +10,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 |---|---|---|
 | `index.html` | Public | Search order history by phone number |
 | `adminlogin.html` | Admins | Username / password login |
-| `dashboard.html` | All admins | Bento dashboard, awaiting-payment list, **New bill** modal (customer → items → Cash/UPI/Card → receipt) |
+| `dashboard.html` | All admins | Cash shift open/close, bento dashboard, awaiting-payment list, **New bill** modal (customer → items → Cash/UPI/Card → receipt) |
 | `managebills.html` | Super admin | Search, view, change status, delete orders, print/WhatsApp receipts |
 | `menu.html` | Super admin | Add / edit / hide / delete menu items, link ingredients to each item |
 | `ingredients.html` | Super admin | Ingredient master list (name + unit) |
@@ -19,6 +19,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `settings.html` | Super admin | Shop name, address, phone, UPI ID, currency, receipt footer |
 | `audit.html` | Super admin | Who changed bills, menu, recipes, ingredients, staff, settings |
 | `account.html` | All admins | Change own password |
+| `sales.html` | Super admin | Sales by day/hour, payment methods, top items, staff, shift closes |
 
 ## Setup
 
