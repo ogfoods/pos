@@ -13,6 +13,7 @@ Live site: https://ogfoods.github.io/pos/
 | Create a new bill | — | ✅ | ✅ |
 | Manage bills (view, change status, delete) | — | ❌ | ✅ |
 | Modify menu items | — | ❌ | ✅ |
+| Manage ingredients and link them to items | — | ❌ | ✅ |
 
 ---
 
@@ -142,6 +143,22 @@ On phones, swipe the table sideways to see all columns.
 **Filter** — type in **Filter items…** above the table to search by name or category.
 
 Price changes only affect new bills; existing bills keep the price they were created with.
+
+### 5.3 Ingredients and recipes
+
+Link the ingredients each menu item needs, so the app records how much of every ingredient each order uses.
+
+**Add ingredients** — Modify menu items → **Manage ingredients** (`ingredients.html`)
+1. Enter a **Name** (e.g. Rice) and pick a **Unit**: g, kg, ml, l or pcs.
+2. Click **Add**. The table shows how many menu items use each ingredient.
+3. Use **Edit** / **Delete** as needed. Deleting removes it from recipes; past orders keep their ingredient history. Changing a unit does not convert existing recipe quantities.
+
+**Link ingredients to a menu item** — Modify menu items → **Ingredients** column
+1. Click **+ Link** (or **N linked**) on the item's row.
+2. For each row pick an ingredient and enter the quantity needed to make **one** of that item (e.g. Dosa: Rice batter 150 g, Oil 10 ml).
+3. **+ Add ingredient** adds a row; **×** removes one. Click **Save**.
+
+**What happens when billing:** each new order stores ingredient usage = recipe quantity × quantity ordered (2 Dosa → 300 g batter, 20 ml oil). This is saved with the order, so editing a recipe later does not change past records. Orders created before a recipe was linked have no ingredient data.
 
 ---
 

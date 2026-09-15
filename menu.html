@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Modify Menu</title>
-  <link rel="stylesheet" href="css/style.css?v=3" />
+  <link rel="stylesheet" href="css/style.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -51,22 +51,46 @@
 
     <div class="toolbar">
       <input class="input" id="filter" placeholder="Filter items…" />
-      <span class="muted" id="count"></span>
+      <div class="row-actions">
+        <span class="muted" id="count"></span>
+        <a class="btn btn-ghost btn-sm" href="ingredients.html">Manage ingredients</a>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Name</th><th>Category</th><th class="num">Price</th><th>Status</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Category</th><th class="num">Price</th><th>Ingredients</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </main>
 
+  <!-- Recipe modal -->
+  <div class="modal-backdrop hidden" id="recipe-modal" role="dialog" aria-modal="true" aria-labelledby="r-title">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 style="margin:0" id="r-title">Ingredients</h2>
+          <div class="muted" style="font-size:.9rem">Quantity needed to make 1 of this item.</div>
+        </div>
+        <button class="icon-btn" type="button" id="r-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="recipe-list" id="r-list"></div>
+        <button class="btn btn-ghost btn-sm" type="button" id="r-add" style="margin-top:.75rem">+ Add ingredient</button>
+      </div>
+      <div class="modal-foot">
+        <a class="btn btn-ghost" href="ingredients.html">Manage ingredients</a>
+        <button class="btn" type="button" id="r-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=3"></script>
-  <script src="js/common.js?v=3"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/common.js?v=4"></script>
   <script>
     const { rpc, money, esc, toast } = App;
-    let me, items = [];
+    let me, items = [], recipes = {}, ingredients = [];
     const $ = (id) => document.getElementById(id);
 
     (async () => {
@@ -80,7 +104,11 @@
 
     async function load() {
       try {
-        items = await rpc("list_menu", { p_token: me.token, p_include_inactive: true });
+        [items, recipes, ingredients] = await Promise.all([
+          rpc("list_menu", { p_token: me.token, p_include_inactive: true }),
+          rpc("list_menu_recipes", { p_token: me.token }),
+          rpc("list_ingredients", { p_token: me.token }),
+        ]);
         render();
       } catch (err) {
         toast(err.message, "error");
@@ -104,6 +132,9 @@
           </div></td>
           <td>${esc(i.category)}</td>
           <td class="num">${money(i.price)}</td>
+          <td><button class="btn btn-ghost btn-sm" data-recipe="${i.id}">${
+            (recipes[i.id] || []).length ? `${recipes[i.id].length} linked` : "+ Link"
+          }</button></td>
           <td><span class="badge ${i.is_active ? "badge-paid" : ""}">${i.is_active ? "available" : "hidden"}</span></td>
           <td><div class="row-actions">
             <button class="btn btn-ghost btn-sm" data-edit="${i.id}">Edit</button>
@@ -112,7 +143,7 @@
         </tr>`
             )
             .join("")
-        : `<tr><td colspan="5" class="empty">${items.length ? "No matching items." : "No items yet. Add your first one above."}</td></tr>`;
+        : `<tr><td colspan="6" class="empty">${items.length ? "No matching items." : "No items yet. Add your first one above."}</td></tr>`;
     }
 
     function resetForm() {
@@ -153,6 +184,8 @@
     $("rows").addEventListener("click", async (e) => {
       const edit = e.target.closest("[data-edit]");
       const del = e.target.closest("[data-del]");
+      const recipeBtn = e.target.closest("[data-recipe]");
+      if (recipeBtn) return openRecipe(Number(recipeBtn.dataset.recipe));
       if (edit) {
         const i = items.find((x) => x.id === Number(edit.dataset.edit));
         $("item-id").value = i.id;
@@ -179,6 +212,107 @@
         }
       }
     });
+
+    // ---------- Recipe (ingredients per menu item) ----------
+    const recipeModal = $("recipe-modal");
+    let recipeItem = null;
+    let draft = []; // [{ ingredient_id, qty }]
+
+    function openRecipe(id) {
+      recipeItem = items.find((x) => x.id === id);
+      draft = (recipes[id] || []).map((r) => ({ ingredient_id: r.ingredient_id, qty: r.qty }));
+      if (!draft.length && ingredients.length) draft.push({ ingredient_id: null, qty: "" });
+      $("r-title").textContent = `Ingredients · ${recipeItem.name}`;
+      renderRecipe();
+      recipeModal.classList.remove("hidden");
+    }
+
+    function closeRecipe() {
+      recipeModal.classList.add("hidden");
+    }
+
+    function renderRecipe() {
+      const list = $("r-list");
+      $("r-add").classList.toggle("hidden", !ingredients.length);
+      $("r-save").disabled = !ingredients.length;
+      if (!ingredients.length) {
+        list.innerHTML = `<div class="empty">No ingredients yet. <a href="ingredients.html">Add ingredients</a> first.</div>`;
+        return;
+      }
+      if (!draft.length) {
+        list.innerHTML = `<div class="empty">No ingredients linked. Click “+ Add ingredient”.</div>`;
+        return;
+      }
+      list.innerHTML = draft
+        .map((r, idx) => {
+          const ing = ingredients.find((g) => g.id === r.ingredient_id);
+          return `<div class="recipe-row" data-idx="${idx}">
+            <select class="input" data-f="ingredient" aria-label="Ingredient">
+              <option value="">Select ingredient</option>
+              ${ingredients.map((g) => `<option value="${g.id}" ${g.id === r.ingredient_id ? "selected" : ""}>${esc(g.name)}</option>`).join("")}
+            </select>
+            <div class="qty-unit">
+              <input class="input" type="number" min="0" step="0.001" inputmode="decimal" data-f="qty" value="${esc(r.qty)}" placeholder="Qty" aria-label="Quantity" />
+              <span class="muted">${ing ? esc(ing.unit) : ""}</span>
+            </div>
+            <button class="icon-btn" type="button" data-remove="${idx}" aria-label="Remove">×</button>
+          </div>`;
+        })
+        .join("");
+    }
+
+    $("r-list").addEventListener("input", (e) => {
+      const row = e.target.closest("[data-idx]");
+      if (!row) return;
+      const r = draft[Number(row.dataset.idx)];
+      if (e.target.dataset.f === "qty") r.qty = e.target.value;
+      if (e.target.dataset.f === "ingredient") {
+        r.ingredient_id = e.target.value ? Number(e.target.value) : null;
+        renderRecipe();
+      }
+    });
+
+    $("r-list").addEventListener("click", (e) => {
+      const rm = e.target.closest("[data-remove]");
+      if (!rm) return;
+      draft.splice(Number(rm.dataset.remove), 1);
+      renderRecipe();
+    });
+
+    $("r-add").addEventListener("click", () => {
+      draft.push({ ingredient_id: null, qty: "" });
+      renderRecipe();
+      $("r-list").querySelector(".recipe-row:last-child select")?.focus();
+    });
+
+    $("r-save").addEventListener("click", async () => {
+      const rows = draft.filter((r) => r.ingredient_id || String(r.qty).trim());
+      if (rows.some((r) => !r.ingredient_id)) return toast("Select an ingredient for every row.", "error");
+      if (rows.some((r) => !(Number(r.qty) > 0))) return toast("Each quantity must be greater than 0.", "error");
+      const ids = rows.map((r) => r.ingredient_id);
+      if (new Set(ids).size !== ids.length) return toast("Each ingredient can be added only once.", "error");
+
+      const btn = $("r-save");
+      btn.disabled = true;
+      try {
+        await rpc("set_menu_item_ingredients", {
+          p_token: me.token,
+          p_menu_item_id: recipeItem.id,
+          p_items: rows.map((r) => ({ ingredient_id: r.ingredient_id, qty: Number(r.qty) })),
+        });
+        toast("Ingredients saved", "success");
+        closeRecipe();
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("r-close").addEventListener("click", closeRecipe);
+    recipeModal.addEventListener("click", (e) => { if (e.target === recipeModal) closeRecipe(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !recipeModal.classList.contains("hidden")) closeRecipe(); });
   </script>
 </body>
 </html>

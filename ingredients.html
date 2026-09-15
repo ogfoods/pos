@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ingredients</title>
+  <link rel="stylesheet" href="css/style.css?v=4" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="menu.html">← Menu</a>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Ingredients</h1>
+    <p class="muted">Add everything used to prepare your menu items, then link them to items from the menu page.</p>
+
+    <form class="card" id="ing-form" style="margin:1rem 0 1.5rem">
+      <h3 id="form-title">Add ingredient</h3>
+      <input type="hidden" id="ing-id" />
+      <div class="form-grid">
+        <div class="field wide">
+          <label for="ing-name">Name</label>
+          <input class="input" id="ing-name" maxlength="80" placeholder="e.g. Rice, Milk, Onion" required />
+        </div>
+        <div class="field">
+          <label for="ing-unit">Unit</label>
+          <select class="input" id="ing-unit">
+            <option value="g">g (grams)</option>
+            <option value="kg">kg (kilograms)</option>
+            <option value="ml">ml (millilitres)</option>
+            <option value="l">l (litres)</option>
+            <option value="pcs">pcs (pieces)</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="save-btn">Add</button>
+          <button class="btn btn-ghost hidden" type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="toolbar">
+      <input class="input" id="filter" placeholder="Filter ingredients…" />
+      <span class="muted" id="count"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Unit</th><th>Used in</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/common.js?v=4"></script>
+  <script>
+    const { rpc, esc, toast } = App;
+    let me, items = [];
+    const $ = (id) => document.getElementById(id);
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    async function load() {
+      try {
+        items = await rpc("list_ingredients", { p_token: me.token });
+        render();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    $("filter").addEventListener("input", render);
+
+    function render() {
+      const q = $("filter").value.trim().toLowerCase();
+      const list = items.filter((i) => !q || i.name.toLowerCase().includes(q));
+      $("count").textContent = `${items.length} ingredient(s)`;
+      $("rows").innerHTML = list.length
+        ? list
+            .map(
+              (i) => `<tr>
+          <td><strong>${esc(i.name)}</strong></td>
+          <td>${esc(i.unit)}</td>
+          <td class="muted">${i.used_count ? `${i.used_count} menu item${i.used_count === 1 ? "" : "s"}` : "Not used"}</td>
+          <td><div class="row-actions">
+            <button class="btn btn-ghost btn-sm" data-edit="${i.id}">Edit</button>
+            <button class="btn btn-danger btn-sm" data-del="${i.id}">Delete</button>
+          </div></td>
+        </tr>`
+            )
+            .join("")
+        : `<tr><td colspan="4" class="empty">${items.length ? "No matching ingredients." : "No ingredients yet. Add your first one above."}</td></tr>`;
+    }
+
+    function resetForm() {
+      $("ing-form").reset();
+      $("ing-id").value = "";
+      $("form-title").textContent = "Add ingredient";
+      $("save-btn").textContent = "Add";
+      $("cancel-btn").classList.add("hidden");
+    }
+    $("cancel-btn").addEventListener("click", resetForm);
+
+    $("ing-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const id = $("ing-id").value ? Number($("ing-id").value) : null;
+      const unit = $("ing-unit").value;
+      const current = id && items.find((x) => x.id === id);
+      if (current && current.unit !== unit && current.used_count &&
+          !confirm(`"${current.name}" is used in ${current.used_count} menu item(s). Changing the unit does not convert their quantities. Continue?`)) return;
+
+      const btn = $("save-btn");
+      btn.disabled = true;
+      try {
+        await rpc("upsert_ingredient", { p_token: me.token, p_id: id, p_name: $("ing-name").value, p_unit: unit });
+        toast(id ? "Ingredient updated" : "Ingredient added", "success");
+        resetForm();
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("rows").addEventListener("click", async (e) => {
+      const edit = e.target.closest("[data-edit]");
+      const del = e.target.closest("[data-del]");
+      if (edit) {
+        const i = items.find((x) => x.id === Number(edit.dataset.edit));
+        $("ing-id").value = i.id;
+        $("ing-name").value = i.name;
+        $("ing-unit").value = i.unit;
+        $("form-title").textContent = `Edit “${i.name}”`;
+        $("save-btn").textContent = "Save";
+        $("cancel-btn").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        $("ing-name").focus();
+      }
+      if (del) {
+        const i = items.find((x) => x.id === Number(del.dataset.del));
+        const warn = i.used_count ? ` It will be removed from ${i.used_count} menu item recipe(s).` : "";
+        if (!confirm(`Delete “${i.name}”?${warn} Past orders keep their ingredient history.`)) return;
+        try {
+          await rpc("delete_ingredient", { p_token: me.token, p_id: i.id });
+          toast("Ingredient deleted", "success");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -12,7 +12,8 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `adminlogin.html` | Admins | Username / password login |
 | `dashboard.html` | All admins | Bento dashboard + **New bill** modal (customer → items → payment QR → Done) |
 | `managebills.html` | Super admin | Search, view, change status, delete orders |
-| `menu.html` | Super admin | Add / edit / hide / delete menu items |
+| `menu.html` | Super admin | Add / edit / hide / delete menu items, link ingredients to each item |
+| `ingredients.html` | Super admin | Ingredient master list (name + unit) |
 
 ## Setup
 

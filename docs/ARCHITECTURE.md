@@ -39,7 +39,8 @@ POS_Billing/
 ├── adminlogin.html     Admin login form
 ├── dashboard.html      Admin dashboard (bento cards) + 3-step New bill modal
 ├── managebills.html    Super admin: list / search / status / delete orders
-├── menu.html           Super admin: add / edit / hide / delete menu items
+├── menu.html           Super admin: add / edit / hide / delete menu items, link ingredients
+├── ingredients.html    Super admin: ingredient master list
 ├── css/
 │   └── style.css       Shared styles, responsive layout, dark mode
 ├── js/
@@ -76,6 +77,10 @@ erDiagram
     customers ||--o{ orders : places
     orders ||--|{ order_items : contains
     menu_items ||--o{ order_items : "referenced by"
+    menu_items ||--o{ menu_item_ingredients : recipe
+    ingredients ||--o{ menu_item_ingredients : "used in"
+    order_items ||--o{ order_item_ingredients : consumed
+    ingredients ||--o{ order_item_ingredients : "snapshot of"
 
     admins {
         bigint id PK
@@ -119,7 +124,19 @@ erDiagram
     }
 ```
 
+Ingredient tables (not all columns shown above):
+- `ingredients(id, name unique case-insensitive, unit in g|kg|ml|l|pcs)`
+- `menu_item_ingredients(menu_item_id, ingredient_id, qty)` — quantity per **one** unit of the menu item; PK on both IDs.
+- `order_item_ingredients(order_id, order_item_id, ingredient_id nullable, ingredient_name, unit, qty)` — written by `create_order` as recipe qty × ordered qty.
+
 Design notes:
+- **Ingredient snapshots** make a daily consumption report a simple query that is unaffected by later recipe edits:
+  ```sql
+  select o.created_at::date as day, oii.ingredient_name, oii.unit, sum(oii.qty) as total
+  from order_item_ingredients oii join orders o on o.id = oii.order_id
+  where o.payment_status <> 'cancelled'
+  group by 1, 2, 3 order by 1 desc, 2;
+  ```
 - **Price and name snapshots** in `order_items` keep old bills correct after a menu item is renamed, repriced or deleted (`menu_item_id` becomes `NULL`).
 - **Phone numbers** are stored as digits only, so `98765 43210` and `9876543210` match the same customer.
 - **Deleting an order** cascades to its `order_items`.
@@ -150,7 +167,12 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `list_menu(p_token, p_include_inactive)` | Any admin (active items); super admin (with hidden items) | Menu sorted by category and name |
 | `create_order(p_token, p_phone, p_customer_name, p_items)` | Any admin | Upserts the customer, creates the order and items, computes the total |
 | `upsert_menu_item(p_token, p_id, p_name, p_category, p_price, p_is_active, p_image_url)` | Super admin | Inserts when `p_id` is null, otherwise updates; image URL must be http(s) |
-| `delete_menu_item(p_token, p_id)` | Super admin | Deletes a menu item |
+| `delete_menu_item(p_token, p_id)` | Super admin | Deletes a menu item (and its recipe) |
+| `list_ingredients(p_token)` | Super admin | Ingredients with `used_count` |
+| `upsert_ingredient(p_token, p_id, p_name, p_unit)` | Super admin | Insert/update; unique name |
+| `delete_ingredient(p_token, p_id)` | Super admin | Deletes; removed from recipes, order snapshots kept |
+| `list_menu_recipes(p_token)` | Super admin | `{menu_item_id: [{ingredient_id, name, unit, qty}]}` |
+| `set_menu_item_ingredients(p_token, p_menu_item_id, p_items)` | Super admin | Replaces an item's recipe; `p_items` = `[{ingredient_id, qty}]` |
 | `list_orders(p_token, p_search, p_limit, p_offset)` | Super admin | Paged orders with items; searches phone, name or order ID |
 | `update_order_status(p_token, p_id, p_status)` | Super admin | Sets `paid`, `pending` or `cancelled` |
 | `delete_order(p_token, p_id)` | Super admin | Deletes an order and its items |
