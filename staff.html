@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=13" />
+  <link rel="stylesheet" href="css/style.css?v=14" />
 </head>
 <body>
   <header class="topbar">
@@ -25,6 +25,7 @@
   <main class="container">
     <h1>Staff</h1>
     <p class="muted">Add cashiers and super admins, reset passwords, and turn off access for people who have left. Disabled users keep their past bills.</p>
+    <p class="muted">Set <strong>login hours</strong> to stop an admin signing in outside their shift. Leave <strong>auto allow</strong> unticked and each of their sign-ins waits on the dashboard until you let them in.</p>
 
     <form class="card" id="user-form" style="margin:1rem 0 1.5rem" autocomplete="off">
       <h3 id="form-title">Add user</h3>
@@ -48,6 +49,17 @@
         <div class="field check-field">
           <label><input type="checkbox" id="active" checked /> Active (can log in)</label>
         </div>
+        <div class="field" id="hours-field">
+          <label for="login-from">Login hours <span class="hint">(IST, blank = any time)</span></label>
+          <div class="time-range">
+            <input class="input" id="login-from" type="time" />
+            <span>to</span>
+            <input class="input" id="login-to" type="time" />
+          </div>
+        </div>
+        <div class="field check-field" id="auto-field">
+          <label><input type="checkbox" id="auto-approve" /> Auto allow login <span class="hint">(no approval needed)</span></label>
+        </div>
         <div class="form-actions">
           <button class="btn" type="submit" id="save-btn">Add user</button>
           <button class="btn btn-ghost hidden" type="button" id="cancel-btn">Cancel</button>
@@ -57,16 +69,16 @@
 
     <div class="table-wrap">
       <table>
-        <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th class="num">Signed in on</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Login hours</th><th>Auto allow</th><th>Last login</th><th class="num">Signed in on</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=13"></script>
-  <script src="js/common.js?v=13"></script>
-  <script src="js/notify.js?v=13"></script>
+  <script src="js/config.js?v=14"></script>
+  <script src="js/common.js?v=14"></script>
+  <script src="js/notify.js?v=14"></script>
   <script>
     const { rpc, esc, toast, fmtDate } = App;
     const $ = (id) => document.getElementById(id);
@@ -92,21 +104,62 @@
 
     function render() {
       $("rows").innerHTML = users
-        .map(
-          (u) => `<tr>
-          <td><strong>${esc(u.username)}</strong> ${u.is_me ? `<span class="badge badge-super">you</span>` : ""}</td>
-          <td><span class="badge ${u.role === "super" ? "badge-super" : ""}">${u.role === "super" ? "super admin" : "admin"}</span></td>
+        .map((u) => {
+          const isSuper = u.role === "super";
+          // Super admins are never gated, so there is nothing to set for them.
+          const hours = isSuper
+            ? `<span class="muted">—</span>`
+            : u.login_from
+            ? `<span class="hours-cell">${esc(u.login_from)}–${esc(u.login_to)}` +
+              `${u.in_window ? "" : ` <span class="badge badge-cancelled">closed</span>`}</span>`
+            : `<span class="muted">Any time</span>`;
+          const auto = isSuper
+            ? `<span class="muted">always</span>`
+            : `<label class="check-field"><input type="checkbox" data-auto="${u.id}" ${u.auto_approve ? "checked" : ""} /></label>`;
+          const waiting = u.waiting_sessions
+            ? ` <span class="badge badge-waiting">${u.waiting_sessions} waiting</span>`
+            : "";
+          return `<tr>
+          <td><strong>${esc(u.username)}</strong> ${u.is_me ? `<span class="badge badge-super">you</span>` : ""}${waiting}</td>
+          <td><span class="badge ${isSuper ? "badge-super" : ""}">${isSuper ? "super admin" : "admin"}</span></td>
           <td><span class="badge ${u.is_active ? "badge-paid" : "badge-cancelled"}">${u.is_active ? "active" : "disabled"}</span></td>
+          <td>${hours}</td>
+          <td>${auto}</td>
           <td class="muted">${u.last_login_at ? fmtDate(u.last_login_at) : "Never"}</td>
           <td class="num">${u.active_sessions} device${u.active_sessions === 1 ? "" : "s"}</td>
           <td><div class="row-actions">
             <button class="btn btn-ghost btn-sm" data-edit="${u.id}">Edit</button>
             <button class="btn btn-danger btn-sm" data-signout="${u.id}" ${u.active_sessions ? "" : "disabled"}>Sign out</button>
           </div></td>
-        </tr>`
-        )
+        </tr>`;
+        })
         .join("");
     }
+
+    // Saves a user with only the given fields changed.
+    function save(u, changes) {
+      return rpc("upsert_admin", {
+        p_token: me.token,
+        p_id: u.id,
+        p_username: u.username,
+        p_role: u.role,
+        p_is_active: u.is_active,
+        p_password: null,
+        p_login_from: u.login_from || null,
+        p_login_to: u.login_to || null,
+        p_auto_approve: u.auto_approve,
+        ...changes,
+      });
+    }
+
+    // Super admins have no hours and no approval step; grey the fields out.
+    function syncRoleFields() {
+      const isSuper = $("role").value === "super";
+      $("login-from").disabled = $("login-to").disabled = $("auto-approve").disabled = isSuper;
+      $("hours-field").classList.toggle("muted", isSuper);
+      $("auto-field").classList.toggle("muted", isSuper);
+    }
+    $("role").addEventListener("change", syncRoleFields);
 
     function resetForm() {
       $("user-form").reset();
@@ -116,6 +169,7 @@
       $("pw-label").innerHTML = `Password <span class="hint">(min 8 characters)</span>`;
       $("role").disabled = $("active").disabled = false;
       $("cancel-btn").classList.add("hidden");
+      syncRoleFields();
     }
     $("cancel-btn").addEventListener("click", resetForm);
 
@@ -137,6 +191,9 @@
           p_role: $("role").value,
           p_is_active: $("active").checked,
           p_password: password || null,
+          p_login_from: $("login-from").value || null,
+          p_login_to: $("login-to").value || null,
+          p_auto_approve: $("auto-approve").checked,
         });
         toast(id ? "User updated" : "User added", "success");
         resetForm();
@@ -145,6 +202,24 @@
         toast(err.message, "error");
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    $("rows").addEventListener("change", async (e) => {
+      const box = e.target.closest("[data-auto]");
+      if (!box) return;
+      const u = users.find((x) => x.id === Number(box.dataset.auto));
+      const want = box.checked;
+      box.disabled = true;
+      try {
+        await save(u, { p_auto_approve: want });
+        u.auto_approve = want;
+        toast(want ? `${u.username} can sign in without approval` : `${u.username} now needs approval`, "success");
+      } catch (err) {
+        box.checked = !want;
+        toast(err.message, "error");
+      } finally {
+        box.disabled = false;
       }
     });
 
@@ -157,7 +232,11 @@
         $("username").value = u.username;
         $("role").value = u.role;
         $("active").checked = u.is_active;
+        $("login-from").value = u.login_from || "";
+        $("login-to").value = u.login_to || "";
+        $("auto-approve").checked = u.auto_approve;
         $("password").value = "";
+        syncRoleFields();
         // You can't demote or disable yourself.
         $("role").disabled = $("active").disabled = u.is_me;
         $("pw-label").innerHTML = `New password <span class="hint">(leave blank to keep)</span>`;

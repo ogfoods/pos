@@ -48,6 +48,7 @@ POS_Billing/
 ├── account.html        Any admin: change own password
 ├── kitchen.html        Any admin: kitchen display (new / preparing / ready columns, live refresh, chime)
 ├── sales.html          Super admin: sales KPIs, by-day / by-hour bars, methods, top items, staff, shift closes
+├── pending.html        Holding page for an admin whose sign-in is waiting for a super admin
 ├── offline.html        Shown by the service worker when a page is opened with no connection
 ├── manifest.webmanifest  PWA manifest: name, icons, colours, standalone display, shortcuts
 ├── sw.js               Service worker: offline shell cache, notification clicks
@@ -197,7 +198,7 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 |---|---|---|
 | `admin_login(p_username, p_password)` | Public | Rate-limited (5 failures per username or 20 per IP in 15 min). Returns `{token, username, role, expires_at}` or `{error}` (errors are returned, not raised, so failed attempts are recorded) |
 | `admin_logout(p_token)` | Public | Deletes the session |
-| `admin_me(p_token)` | Any admin | Returns `{username, role}`; used as a page guard |
+| `admin_me(p_token)` | Any admin, even while waiting | `{username, role, approved, in_window, window}`; used as a page guard |
 | `recent_logins(p_token, p_after_id)` | Super admin | Successful logins newer than `p_after_id` (max 20, last hour only) plus `last_id` and `server_time`. `p_after_id` null = bootstrap: cursor only, no rows |
 | `change_my_password(p_token, p_current, p_new)` | Any admin | Verifies current password, min 8 chars, signs out the user's other sessions; audited |
 | `get_settings()` | Public | Shop settings, including home page fields (`tagline`, `whatsapp`, `maps_url`, `cover_image_url`, `opening_hours`) |
@@ -205,8 +206,11 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `public_menu()` | Public | Active items (name, category, price, image, stock ok/low/out) and up to 6 favourite item ids (most paid qty, 7 days). No quantities exposed |
 | `update_settings(p_token, p_settings)` | Super admin | Validates and saves all settings; audited with changed fields |
 | `list_admins(p_token)` | Super admin | Users with last login, active session count, `is_me` |
-| `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
+| `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password, p_login_from, p_login_to, p_auto_approve)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
 | `revoke_admin_sessions(p_token, p_id)` | Super admin | Deletes a user's sessions (keeps the caller's); returns count; audited |
+| `pending_logins(p_token)` | Super admin | Sign-ins still waiting: `{session_id, username, role, ip, created_at, login_window}`, oldest first. Sessions whose login hours have since ended are left out |
+| `approve_login(p_token, p_session_id)` | Super admin | Lets that one sign-in through; audited |
+| `deny_login(p_token, p_session_id)` | Super admin | Deletes that session, so the device is signed out; audited |
 | `list_audit_log(p_token, p_category, p_search, p_limit, p_offset)` | Super admin | Paged log; category = action prefix (`order`, `menu`, `ingredient`, `staff`, `settings`); search matches user, entity ID or details text |
 | `kitchen_orders(p_token)` | Any admin | `{server_time, active, served}`: active = not served/cancelled from the last 24h (oldest first, max 100); served = last 10 served in 2h |
 | `set_kitchen_status(p_token, p_id, p_status)` | Any admin | `new`/`preparing`/`ready`/`served`; rejects cancelled orders; audited |
@@ -238,7 +242,7 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `update_order_status(p_token, p_id, p_status)` | Super admin | Sets `paid`, `pending` or `cancelled` |
 | `delete_order(p_token, p_id)` | Super admin | Deletes an order and its items |
 
-Error codes the client relies on: `28000` (session invalid/expired → redirect to login), `28P01` (bad credentials), `42501` (not super admin).
+Error codes the client relies on: `28000` (session invalid/expired, or the login window has closed → redirect to login with the reason), `28002` (signed in but not yet approved → redirect to `pending.html`), `28P01` (bad credentials), `42501` (not super admin).
 
 ## Key flows
 
@@ -257,6 +261,58 @@ sequenceDiagram
     P->>U: redirect to dashboard.html
     Note over P,DB: Each protected page calls admin_me(token) on load
 ```
+
+### Login hours and approval
+
+Two gates stand between an admin and the dashboard. Both are enforced in the
+database, on every RPC, not just in the UI. Super admins are never gated — if
+they were, nobody could unlock anyone.
+
+| Gate | Stored on | Checked | Failure |
+|---|---|---|---|
+| Login hours | `admins.login_from` / `login_to` (IST, null = any time) | `admin_login`, and `_require_admin` on every later call | `28000` — the session ends and the login page says why |
+| Approval | `admin_sessions.approved_at` (set at login when `admins.auto_approve`) | `_require_admin` | `28002` — the browser goes to `pending.html` |
+
+```mermaid
+sequenceDiagram
+    participant A as Admin
+    participant DB as Supabase
+    participant S as Super admin
+    A->>DB: admin_login
+    alt outside login hours
+        DB-->>A: {error: "You can only sign in between 09:00 and 22:00 IST."}
+    else auto allow ticked
+        DB-->>A: token, approved = true
+    else needs approval
+        DB-->>A: token, approved = false
+        A->>A: pending.html, waiting
+        DB->>S: ping on "admin-logins"
+        S->>DB: approve_login(session_id)
+        A->>A: taps Refresh
+        A->>DB: admin_me -> approved = true
+        A->>A: dashboard.html
+    end
+```
+
+Details worth knowing:
+
+- **A window may wrap midnight.** `17:00`–`02:00` means the evening shift; the
+  check is written as two ranges in that case. `_within_login_window` owns this.
+- **Approval lasts exactly as long as that day's window.** Nothing expires the
+  approval itself; the hours check simply keeps running on every call, so when
+  the shift ends the session stops working. With no hours set, approval lasts
+  until the 12-hour session expires.
+- **Approval is per device.** A second device means a second sign-in and a
+  second approval.
+- **`admin_me` is deliberately outside the gate** (it uses `_session_admin`, not
+  `_require_admin`), because `pending.html` has to be able to ask whether it has
+  been let in yet.
+- **Denying deletes the session**, so that device is signed out and can try again.
+- **Existing accounts were not locked out**: migration 013 sets `auto_approve`
+  on every account that already existed, and marks every live session approved.
+  Gating starts when a super admin unticks **Auto allow** for someone.
+- **Signing a user out of every device** is the older `revoke_admin_sessions`,
+  still on the Staff page. It removes approved and waiting sessions alike.
 
 ### Sign-in alerts (super admin)
 
@@ -294,6 +350,12 @@ user is a super admin, so it works on every admin page, not just the dashboard.
   `localStorage` (`pos_login_alerts`); the click is also the user gesture that
   browsers require before asking for notification permission and before audio
   can play.
+- **Approvals ride along.** Each poll also calls `pending_logins`, so an alert
+  about someone who is waiting carries **Approve** / **Deny** — on the toast, and
+  as notification action buttons. `App.approvals.onChange` lets a page draw the
+  same list; `dashboard.html` uses it for the banner. Answering from a
+  notification is relayed by `sw.js` to an open page (which holds the token); with
+  no page open it opens `dashboard.html?approve=<id>`, which acts on it.
 
 ## PWA
 

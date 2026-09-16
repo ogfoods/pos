@@ -21,16 +21,28 @@ create table if not exists public.admins (
   password_hash text not null,
   role          text not null default 'admin' check (role in ('super', 'admin')),
   is_active     boolean not null default true,
+  -- Daily window (IST) this account may sign in; null = any time. Ignored for super admins.
+  login_from    time,
+  login_to      time,
+  -- Ticked: sign-ins go straight through. Unticked: a super admin must approve each one.
+  auto_approve  boolean not null default false,
   last_login_at timestamptz,
   created_at    timestamptz not null default now()
 );
 
 create table if not exists public.admin_sessions (
-  token      uuid primary key default gen_random_uuid(),
-  admin_id   bigint not null references public.admins(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null default now() + interval '12 hours'
+  token       uuid primary key default gen_random_uuid(),
+  id          bigint generated always as identity unique,
+  admin_id    bigint not null references public.admins(id) on delete cascade,
+  ip          text,
+  -- Null while the sign-in is waiting for a super admin.
+  approved_at timestamptz,
+  approved_by bigint references public.admins(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null default now() + interval '12 hours'
 );
+create index if not exists admin_sessions_pending_idx
+  on public.admin_sessions(created_at desc) where approved_at is null;
 
 create table if not exists public.menu_items (
   id         bigint generated always as identity primary key,
@@ -135,6 +147,34 @@ insert into public.settings(id) values (1) on conflict (id) do nothing;
 alter table public.settings enable row level security;
 
 alter table public.admins add column if not exists last_login_at timestamptz;
+
+-- Admins: login hours and sign-in approval. Accounts and sessions that exist
+-- when this first runs keep working exactly as before; untick "auto allow"
+-- per person to start gating them.
+alter table public.admins add column if not exists login_from time;
+alter table public.admins add column if not exists login_to   time;
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'admins' and column_name = 'auto_approve') then
+    alter table public.admins add column auto_approve boolean not null default false;
+    update public.admins set auto_approve = true;
+  end if;
+  if not exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'admin_sessions' and column_name = 'id') then
+    alter table public.admin_sessions add column id bigint generated always as identity;
+    create unique index admin_sessions_id_idx on public.admin_sessions(id);
+  end if;
+  if not exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'admin_sessions' and column_name = 'approved_at') then
+    alter table public.admin_sessions add column approved_at timestamptz;
+    update public.admin_sessions set approved_at = now();
+  end if;
+end $$;
+alter table public.admin_sessions add column if not exists ip text;
+alter table public.admin_sessions add column if not exists approved_by bigint references public.admins(id) on delete set null;
+create index if not exists admin_sessions_pending_idx
+  on public.admin_sessions(created_at desc) where approved_at is null;
 
 -- Who changed what. details holds a snapshot or {"changes": {field: [old, new]}}.
 create table if not exists public.audit_log (
@@ -249,7 +289,33 @@ alter table public.order_items    enable row level security;
 -- ---------------------------------------------------------------------
 -- Internal helper: validate token (+ optional super requirement)
 -- ---------------------------------------------------------------------
-create or replace function public._require_admin(p_token uuid, p_super boolean default false)
+create or replace function public._within_login_window(a public.admins)
+returns boolean
+language sql stable
+as $$
+  select case
+    when a.role = 'super' then true
+    when a.login_from is null or a.login_to is null then true
+    when a.login_from = a.login_to then true
+    when a.login_from < a.login_to
+      then (now() at time zone 'Asia/Kolkata')::time >= a.login_from
+       and (now() at time zone 'Asia/Kolkata')::time <  a.login_to
+    else (now() at time zone 'Asia/Kolkata')::time >= a.login_from
+      or  (now() at time zone 'Asia/Kolkata')::time <  a.login_to
+  end;
+$$;
+
+create or replace function public._window_label(a public.admins)
+returns text
+language sql stable
+as $$
+  select case
+    when a.login_from is null or a.login_to is null then null
+    else to_char(a.login_from, 'HH24:MI') || ' and ' || to_char(a.login_to, 'HH24:MI')
+  end;
+$$;
+
+create or replace function public._session_admin(p_token uuid)
 returns public.admins
 language plpgsql security definer set search_path = public, extensions
 as $$
@@ -263,9 +329,32 @@ begin
   if a.id is null then
     raise exception 'Session expired. Please log in again.' using errcode = '28000';
   end if;
+  return a;
+end $$;
+
+create or replace function public._require_admin(p_token uuid, p_super boolean default false)
+returns public.admins
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare a public.admins; v_label text;
+begin
+  a := public._session_admin(p_token);
+
   if p_super and a.role <> 'super' then
     raise exception 'Super admin access required.' using errcode = '42501';
   end if;
+
+  if a.role <> 'super' then
+    if not public._within_login_window(a) then
+      v_label := public._window_label(a);
+      raise exception 'Your login hours (% IST) have ended.', v_label using errcode = '28000';
+    end if;
+    if not exists (select 1 from public.admin_sessions s
+                   where s.token = p_token and s.approved_at is not null) then
+      raise exception 'Waiting for a super admin to approve this sign-in.' using errcode = '28002';
+    end if;
+  end if;
+
   return a;
 end $$;
 
@@ -502,6 +591,7 @@ declare
   v_fails  int;
   v_ipfail int := 0;
   v_wait   int;
+  v_label  text;
 begin
   delete from public.login_attempts where created_at < now() - interval '1 day';
 
@@ -538,15 +628,30 @@ begin
     return json_build_object('error', 'Invalid username or password.');
   end if;
 
+  -- Password was right, so this is not a brute-force attempt: no attempt row
+  -- is written and the failure counter is left alone.
+  if not public._within_login_window(a) then
+    v_label := public._window_label(a);
+    perform public._audit(a, 'staff.login_refused', a.id::text,
+      jsonb_build_object('username', a.username, 'window', v_label, 'ip', v_ip));
+    return json_build_object('error',
+      format('You can only sign in between %s IST.', v_label));
+  end if;
+
   insert into public.login_attempts(username, ip, succeeded) values (v_user, v_ip, true);
   update public.admins set last_login_at = now() where id = a.id;
   delete from public.admin_sessions where expires_at < now();
-  insert into public.admin_sessions(admin_id) values (a.id) returning * into s;
+
+  insert into public.admin_sessions(admin_id, ip, approved_at)
+  values (a.id, v_ip, case when a.role = 'super' or a.auto_approve then now() end)
+  returning * into s;
 
   perform public._login_ping();
 
-  return json_build_object('token', s.token, 'username', a.username,
-                           'role', a.role, 'expires_at', s.expires_at);
+  return json_build_object('token', s.token, 'username', a.username, 'role', a.role,
+                           'expires_at', s.expires_at,
+                           'approved', s.approved_at is not null,
+                           'window', public._window_label(a));
 end $$;
 
 create or replace function public.admin_logout(p_token uuid)
@@ -610,10 +715,18 @@ create or replace function public.admin_me(p_token uuid)
 returns json
 language plpgsql security definer set search_path = public, extensions
 as $$
-declare a public.admins;
+declare a public.admins; v_approved boolean;
 begin
-  a := public._require_admin(p_token);
-  return json_build_object('username', a.username, 'role', a.role);
+  a := public._session_admin(p_token);
+  select s.approved_at is not null into v_approved
+  from public.admin_sessions s where s.token = p_token;
+
+  return json_build_object(
+    'username', a.username,
+    'role', a.role,
+    'approved', a.role = 'super' or coalesce(v_approved, false),
+    'in_window', public._within_login_window(a),
+    'window', public._window_label(a));
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -1218,7 +1331,14 @@ begin
   select coalesce(json_agg(r order by r.is_active desc, lower(r.username)), '[]'::json) into v
   from (
     select ad.id, ad.username, ad.role, ad.is_active, ad.created_at, ad.last_login_at,
-           (select count(*) from public.admin_sessions s where s.admin_id = ad.id and s.expires_at > now()) as active_sessions,
+           to_char(ad.login_from, 'HH24:MI') as login_from,
+           to_char(ad.login_to, 'HH24:MI') as login_to,
+           ad.auto_approve,
+           public._within_login_window(ad) as in_window,
+           (select count(*) from public.admin_sessions s
+             where s.admin_id = ad.id and s.expires_at > now()) as active_sessions,
+           (select count(*) from public.admin_sessions s
+             where s.admin_id = ad.id and s.expires_at > now() and s.approved_at is null) as waiting_sessions,
            ad.id = a.id as is_me
     from public.admins ad
   ) r;
@@ -1227,8 +1347,14 @@ end $$;
 
 -- Insert when p_id is null (password required), otherwise update (blank password keeps it).
 -- Changing role or password, or deactivating, signs that user out everywhere.
+-- The pre-013 six-argument version is replaced: leaving both overloads in
+-- place would make the call ambiguous.
+drop function if exists public.upsert_admin(uuid, bigint, text, text, boolean, text);
+
 create or replace function public.upsert_admin(
-  p_token uuid, p_id bigint, p_username text, p_role text, p_is_active boolean, p_password text default null)
+  p_token uuid, p_id bigint, p_username text, p_role text, p_is_active boolean,
+  p_password text default null, p_login_from text default null, p_login_to text default null,
+  p_auto_approve boolean default false)
 returns json
 language plpgsql security definer set search_path = public, extensions
 as $$
@@ -1240,6 +1366,9 @@ declare
   v_role    text := coalesce(p_role, 'admin');
   v_active  boolean := coalesce(p_is_active, true);
   v_pw      text := nullif(p_password, '');
+  v_from    time := nullif(trim(coalesce(p_login_from, '')), '')::time;
+  v_to      time := nullif(trim(coalesce(p_login_to, '')), '')::time;
+  v_auto    boolean := coalesce(p_auto_approve, false);
   v_diff    jsonb;
   v_revoked int := 0;
 begin
@@ -1249,17 +1378,26 @@ begin
   end if;
   if v_role not in ('super', 'admin') then raise exception 'Choose a valid role.'; end if;
   if v_pw is not null and length(v_pw) < 8 then raise exception 'Password must be at least 8 characters.'; end if;
+  if (v_from is null) <> (v_to is null) then
+    raise exception 'Set both a start and an end time for the login hours, or leave both blank.';
+  end if;
   if exists (select 1 from public.admins where lower(username) = v_user and id is distinct from p_id) then
     raise exception 'Username "%" is already taken.', v_user;
   end if;
 
+  -- Super admins are never gated, so these fields are not stored for them.
+  if v_role = 'super' then
+    v_from := null; v_to := null; v_auto := true;
+  end if;
+
   if p_id is null then
     if v_pw is null then raise exception 'Set a password for the new user.'; end if;
-    insert into public.admins(username, password_hash, role, is_active)
-    values (v_user, crypt(v_pw, gen_salt('bf')), v_role, v_active)
+    insert into public.admins(username, password_hash, role, is_active, login_from, login_to, auto_approve)
+    values (v_user, crypt(v_pw, gen_salt('bf')), v_role, v_active, v_from, v_to, v_auto)
     returning * into v_new;
     perform public._audit(a, 'staff.create', v_new.id::text,
-      jsonb_build_object('username', v_new.username, 'role', v_new.role, 'is_active', v_new.is_active));
+      jsonb_build_object('username', v_new.username, 'role', v_new.role, 'is_active', v_new.is_active,
+                         'login_from', v_from, 'login_to', v_to, 'auto_approve', v_auto));
   else
     select * into v_old from public.admins where id = p_id for update;
     if not found then raise exception 'User not found.'; end if;
@@ -1269,6 +1407,7 @@ begin
 
     update public.admins
        set username = v_user, role = v_role, is_active = v_active,
+           login_from = v_from, login_to = v_to, auto_approve = v_auto,
            password_hash = case when v_pw is null then password_hash else crypt(v_pw, gen_salt('bf')) end
      where id = p_id
     returning * into v_new;
@@ -1290,7 +1429,8 @@ begin
     end if;
   end if;
 
-  return json_build_object('id', v_new.id, 'username', v_new.username, 'role', v_new.role, 'is_active', v_new.is_active);
+  return json_build_object('id', v_new.id, 'username', v_new.username,
+                           'role', v_new.role, 'is_active', v_new.is_active);
 end $$;
 
 -- Sign a user out on all devices (your own current session is kept). Returns sessions removed.
@@ -1307,6 +1447,77 @@ begin
   get diagnostics n = row_count;
   perform public._audit(a, 'staff.sign_out', p_id::text, jsonb_build_object('username', v_user, 'sessions', n));
   return n;
+end $$;
+
+-- Sign-ins waiting for a super admin, and the two ways to answer them.
+create or replace function public.pending_logins(p_token uuid)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v json;
+begin
+  perform public._require_admin(p_token, true);
+  select coalesce(json_agg(r order by r.created_at), '[]'::json) into v
+  from (
+    select s.id as session_id, ad.username, ad.role, s.ip, s.created_at,
+           public._window_label(ad) as login_window
+    from public.admin_sessions s
+    join public.admins ad on ad.id = s.admin_id
+    where s.approved_at is null
+      and s.expires_at > now()
+      and ad.is_active
+      and public._within_login_window(ad)
+    limit 50
+  ) r;
+  return v;
+end $$;
+
+create or replace function public.approve_login(p_token uuid, p_session_id bigint)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare a public.admins; v_user text;
+begin
+  a := public._require_admin(p_token, true);
+
+  update public.admin_sessions s
+     set approved_at = now(), approved_by = a.id
+   where s.id = p_session_id and s.approved_at is null and s.expires_at > now();
+
+  if not found then
+    raise exception 'That sign-in is no longer waiting.';
+  end if;
+
+  select ad.username into v_user
+  from public.admin_sessions s join public.admins ad on ad.id = s.admin_id
+  where s.id = p_session_id;
+
+  perform public._audit(a, 'staff.login_approve', p_session_id::text,
+    jsonb_build_object('username', v_user));
+  perform public._login_ping();
+  return json_build_object('username', v_user);
+end $$;
+
+create or replace function public.deny_login(p_token uuid, p_session_id bigint)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare a public.admins; v_user text;
+begin
+  a := public._require_admin(p_token, true);
+
+  select ad.username into v_user
+  from public.admin_sessions s join public.admins ad on ad.id = s.admin_id
+  where s.id = p_session_id and s.approved_at is null;
+  if v_user is null then
+    raise exception 'That sign-in is no longer waiting.';
+  end if;
+
+  delete from public.admin_sessions where id = p_session_id;
+  perform public._audit(a, 'staff.login_deny', p_session_id::text,
+    jsonb_build_object('username', v_user));
+  perform public._login_ping();
+  return json_build_object('username', v_user);
 end $$;
 
 -- Any admin: change own password. Other sessions of this user are signed out.
@@ -1794,6 +2005,9 @@ $$;
 -- Permissions: only expose the intended RPCs
 -- ---------------------------------------------------------------------
 revoke all on function public._require_admin(uuid, boolean) from public, anon, authenticated;
+revoke all on function public._session_admin(uuid) from public, anon, authenticated;
+revoke all on function public._within_login_window(public.admins) from public, anon, authenticated;
+revoke all on function public._window_label(public.admins) from public, anon, authenticated;
 revoke all on function public._request_ip(), public._order_json(bigint) from public, anon, authenticated;
 
 revoke all on function
@@ -1822,14 +2036,16 @@ from public, anon, authenticated;
 
 revoke all on function
   public.get_settings(), public.update_settings(uuid, jsonb),
-  public.list_admins(uuid), public.upsert_admin(uuid, bigint, text, text, boolean, text),
+  public.list_admins(uuid), public.upsert_admin(uuid, bigint, text, text, boolean, text, text, text, boolean),
+  public.pending_logins(uuid), public.approve_login(uuid, bigint), public.deny_login(uuid, bigint),
   public.revoke_admin_sessions(uuid, bigint), public.change_my_password(uuid, text, text),
   public.list_audit_log(uuid, text, text, int, int)
 from public;
 
 grant execute on function
   public.get_settings(), public.update_settings(uuid, jsonb),
-  public.list_admins(uuid), public.upsert_admin(uuid, bigint, text, text, boolean, text),
+  public.list_admins(uuid), public.upsert_admin(uuid, bigint, text, text, boolean, text, text, text, boolean),
+  public.pending_logins(uuid), public.approve_login(uuid, bigint), public.deny_login(uuid, bigint),
   public.revoke_admin_sessions(uuid, bigint), public.change_my_password(uuid, text, text),
   public.list_audit_log(uuid, text, text, int, int)
 to anon, authenticated;

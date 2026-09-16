@@ -1,4 +1,5 @@
-// PWA service worker + super admin sign-in alerts.
+// PWA service worker, install button, and the super admin's sign-in alerts
+// and approval queue.
 // Loaded on every page; the alert half only starts for super admins
 // (common.js calls App.loginAlerts.start after requireAdmin).
 (function () {
@@ -60,6 +61,15 @@
     }
   }
 
+  // Takes a notification down once it has been answered somewhere else.
+  async function closeNotification(tag) {
+    try {
+      const reg = await swReady;
+      if (!reg || !reg.getNotifications) return;
+      (await reg.getNotifications({ tag })).forEach((n) => n.close());
+    } catch {}
+  }
+
   // -------------------------------------------------------------------
   // Chime (browsers need a tap before audio can play)
   // -------------------------------------------------------------------
@@ -91,7 +101,7 @@
   }
 
   // -------------------------------------------------------------------
-  // Sign-in alerts (super admin)
+  // Sign-in alerts and approvals (super admin)
   // -------------------------------------------------------------------
   const CURSOR_KEY = "pos_login_cursor";
   const PREF_KEY = "pos_login_alerts";
@@ -118,6 +128,15 @@
   let cursor = Number(store.get(CURSOR_KEY, "")) || null;
   let timer = null, pending = null, busy = false, started = false;
   let bell = null;
+  let waiting = [];               // sign-ins still to be answered
+  const listeners = new Set();    // pages that draw the waiting list
+
+  const emit = () =>
+    listeners.forEach((fn) => {
+      try {
+        fn(waiting);
+      } catch {}
+    });
 
   function start(admin) {
     if (started || !admin || admin.role !== "super") return;
@@ -134,7 +153,8 @@
     });
   }
 
-  // The database broadcasts an empty "login" event on topic "admin-logins".
+  // The database broadcasts an empty "login" event on topic "admin-logins"
+  // after a sign-in and after every approval or denial.
   function subscribe() {
     try {
       App.db.channel("admin-logins").on("broadcast", { event: "login" }, schedulePoll).subscribe();
@@ -157,6 +177,11 @@
       const first = cursor === null;
       cursor = maxId;
       store.set(CURSOR_KEY, String(cursor));
+
+      // Who is waiting must be known before an alert is written, so the
+      // alert can carry Approve / Deny.
+      await refreshWaiting();
+
       // The first poll only learns the cursor; it must not replay old logins.
       if (first || !on) return;
       rows.filter((r) => String(r.username).toLowerCase() !== String(me.username).toLowerCase()).forEach(announce);
@@ -167,12 +192,46 @@
     }
   }
 
+  async function refreshWaiting() {
+    if (!me) return waiting;
+    try {
+      waiting = await App.rpc("pending_logins", { p_token: me.token });
+    } catch {
+      waiting = [];
+    }
+    emit();
+    return waiting;
+  }
+
+  const waitingFor = (username) =>
+    waiting.find((w) => String(w.username).toLowerCase() === String(username).toLowerCase());
+
   function announce(r) {
     const who = r.username;
     const role = r.role === "super" ? "Super admin" : "Admin";
     const at = App.fmtDate(r.created_at);
-    App.toast(`${who} signed in · ${role}`, "info");
+    const w = waitingFor(who);
     chime();
+
+    if (w) {
+      actionToast(`${who} is waiting to be let in`, w.session_id);
+      show(`${who} is waiting to be let in`, {
+        body: `${role} · ${at}${r.ip ? " · " + r.ip : ""}`,
+        icon: "icons/icon-192.png",
+        badge: "icons/badge-96.png",
+        tag: "approve-" + w.session_id,
+        renotify: true,
+        requireInteraction: true,
+        actions: [
+          { action: "approve", title: "Approve" },
+          { action: "deny", title: "Deny" },
+        ],
+        data: { url: "dashboard.html", sessionId: w.session_id },
+      });
+      return;
+    }
+
+    App.toast(`${who} signed in · ${role}`, "info");
     show(`${who} signed in`, {
       body: `${role} · ${at}${r.ip ? " · " + r.ip : ""}`,
       icon: "icons/icon-192.png",
@@ -180,6 +239,55 @@
       tag: "login-" + r.id, // same tag across tabs -> one notification
       renotify: true,
       data: { url: "audit.html" },
+    });
+  }
+
+  async function answer(sessionId, ok) {
+    if (!me) return;
+    const fn = ok ? "approve_login" : "deny_login";
+    try {
+      const res = await App.rpc(fn, { p_token: me.token, p_session_id: Number(sessionId) });
+      App.toast(ok ? `${res.username} let in` : `${res.username} denied`, ok ? "success" : "info");
+    } catch (err) {
+      App.toast(err.message, "error");
+    }
+    closeNotification("approve-" + sessionId);
+    await refreshWaiting();
+  }
+
+  // A toast carrying Approve / Deny, for the page the super admin is on.
+  function actionToast(msg, sessionId) {
+    let box = document.getElementById("toast-box");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "toast-box";
+      document.body.appendChild(box);
+    }
+    const t = document.createElement("div");
+    t.className = "toast toast-info";
+    t.innerHTML =
+      `<div>${App.esc(msg)}</div>` +
+      `<div class="toast-actions">` +
+      `<button class="btn btn-sm" data-ok="1">Approve</button>` +
+      `<button class="btn btn-ghost btn-sm" data-ok="0">Deny</button>` +
+      `</div>`;
+    t.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ok]");
+      if (!b) return;
+      t.remove();
+      answer(sessionId, b.dataset.ok === "1");
+    });
+    box.appendChild(t);
+    // Stays long enough to act on; the dashboard banner keeps the list anyway.
+    setTimeout(() => t.remove(), 30000);
+  }
+
+  // Approve / Deny tapped on the notification itself (relayed by sw.js).
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      const d = e.data;
+      if (!d || d.type !== "approval") return;
+      answer(d.sessionId, d.action === "approve");
     });
   }
 
@@ -268,5 +376,17 @@
   });
 
   App.loginAlerts = { start, poll };
+  App.approvals = {
+    list: () => waiting,
+    refresh: refreshWaiting,
+    approve: (id) => answer(id, true),
+    deny: (id) => answer(id, false),
+    // Calls back now and on every change; returns an unsubscribe function.
+    onChange(fn) {
+      listeners.add(fn);
+      fn(waiting);
+      return () => listeners.delete(fn);
+    },
+  };
   App.notify = { show, requestPermission, permission, supported, swReady, canInstall: () => !!installEvent };
 })();

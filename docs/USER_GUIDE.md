@@ -328,14 +328,56 @@ A record of who did what and when, newest first:
 | Menu | Items added, edited (old → new values), deleted, recipe changes (before / after) |
 | Ingredients | Added, edited, deleted |
 | Stock | Purchases, waste, counts (before → after), tracking and alert changes |
-| Staff | Users added or edited, password resets, sign-outs, own password changes |
+| Staff | Users added or edited, password resets, sign-outs, own password changes, login hours and auto-allow changes, sign-ins approved or denied, and sign-ins refused for being outside the login hours |
 | Kitchen | Order moved between new / preparing / ready / served |
 | Shifts | Opened (opening cash), closed (expected, counted, difference) |
 | Settings | Every changed field (old → new) |
 
 Filter with the area chips, or search by username, order number or item name. The log cannot be edited or deleted from the app.
 
-### 6.4 Sign-in alerts
+### 6.4 Login hours and approving sign-ins
+
+**Where:** Dashboard → **Staff** (`staff.html`), and the banner on the dashboard
+
+Two controls decide when each admin can work. Both are per account, and neither
+applies to super admins.
+
+**Login hours.** In the user form, set **Login hours** to the shift, for example
+`09:00` to `22:00` (IST). Then:
+
+- Outside those hours the password is refused, with the hours in the message.
+- An admin already signed in is dropped the moment the hours end, and the login
+  page tells them why.
+- Leave both boxes blank for no restriction.
+- A shift crossing midnight is fine: `17:00` to `02:00`.
+
+**Auto allow.** Each row in the staff table has an **Auto allow** checkbox.
+
+| Auto allow | What happens when that person signs in |
+|---|---|
+| Ticked | Straight to the dashboard, as before |
+| Unticked | They land on a waiting page until you let them in |
+
+**Letting someone in.** When an admin who needs approval signs in, you get the
+usual sign-in alert, now with **Approve** and **Deny** on it, and a
+**Waiting to be let in** strip appears at the top of your dashboard listing
+everyone waiting. Either place works, on any device where you are signed in.
+
+- **Approve** — they tap **Refresh** on their screen and the dashboard opens.
+- **Deny** — that device is signed out. They can try again.
+
+Approval covers that one device, and lasts until the end of that day's login
+hours. Next shift, or a second device, means approving again. With no login
+hours set, it lasts until the 12-hour session runs out.
+
+**Sign out devices** (the red button in each row) still works as before, and
+clears both approved and waiting sessions.
+
+> Accounts that existed before this feature was switched on are all set to
+> **Auto allow**, so nothing changed for them. Untick it per person to start
+> approving their sign-ins.
+
+### 6.5 Sign-in alerts
 
 **Where:** the 🔔 button at the top of any super admin page
 
@@ -360,13 +402,13 @@ Notes:
 - Every sign-in is also listed on the audit log, so nothing is lost if you miss an
   alert.
 
-### 6.5 My account (all admins)
+### 6.6 My account (all admins)
 
 **Where:** **Account** at the top of the dashboard (`account.html`)
 
 Change your own password: enter the current one, then the new one twice (min 8 characters). You stay signed in on this device; your other devices are signed out.
 
-### 6.6 First super admin (owner / developer)
+### 6.7 First super admin (owner / developer)
 
 The very first super admin is created in Supabase → **SQL Editor**; after that, use the Staff page.
 
@@ -424,6 +466,10 @@ the kitchen board, the menu — always needs the internet.
 | Page shows errors about the database | Check `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `js/config.js` and that `schema.sql` (or all migrations) was run. |
 | "Too many failed attempts" | Wait the number of minutes shown, or ask a super admin to reset your password on the Staff page. |
 | Shop name / UPI ID not updated on a device | Refresh the page; settings load when a page opens. |
+| "You can only sign in between …" | That account has login hours set. A super admin can change them on the Staff page. |
+| "Your login hours … have ended." | The shift window closed. Nothing is lost; sign in again next shift. |
+| Admin stuck on the waiting page | A super admin has to approve them: dashboard banner or the sign-in alert. Tick **Auto allow** on the Staff page to stop asking. |
+| Waiting admin never appears for approval | Their login hours may have ended, which hides them from the list. Check the hours on the Staff page. |
 | No sign-in alerts | Check the bell says **🔔 Sign-in alerts**, that the app is open somewhere, and that the browser is allowed to show notifications for the site. Your own sign-ins are never announced. |
 | Alerts have no sound | Browsers only allow sound after a click. Click the bell once on that device. |
 | App still shows an old version after an update | Close every window of the installed app and reopen it, or hard-refresh in the browser. |

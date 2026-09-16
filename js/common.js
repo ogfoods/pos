@@ -26,12 +26,37 @@
     },
   };
 
+  // Message shown on the login page after the server ends a session.
+  const FLASH_KEY = "pos_flash";
+  const flash = {
+    set(msg) {
+      try {
+        sessionStorage.setItem(FLASH_KEY, msg);
+      } catch {}
+    },
+    take() {
+      try {
+        const m = sessionStorage.getItem(FLASH_KEY);
+        sessionStorage.removeItem(FLASH_KEY);
+        return m;
+      } catch {
+        return null;
+      }
+    },
+  };
+
+  const onPage = (name) => location.pathname.endsWith(name);
+
   async function rpc(fn, args) {
     const { data, error } = await db.rpc(fn, args);
     if (error) {
+      // 28000 session gone or login hours over; 28002 waiting for approval.
       if (error.code === "28000") {
         session.clear();
+        flash.set(error.message);
         location.href = "adminlogin.html";
+      } else if (error.code === "28002" && !onPage("pending.html")) {
+        location.href = "pending.html";
       }
       throw new Error(error.message || "Request failed");
     }
@@ -73,8 +98,10 @@
   applySettings(cached);
   const settingsReady = db.rpc("get_settings").then(({ data }) => applySettings(data), () => {});
 
-  // Redirects to login if not signed in (or not super when required).
-  async function requireAdmin({ superOnly = false } = {}) {
+  // Redirects to login if not signed in, to the waiting page if this sign-in
+  // has not been approved yet, or to the dashboard if super admin is required.
+  // `allowPending` is for pending.html itself, which must not redirect to itself.
+  async function requireAdmin({ superOnly = false, allowPending = false } = {}) {
     await settingsReady;
     const s = session.get();
     if (!s) {
@@ -83,6 +110,19 @@
     }
     const me = await rpc("admin_me", { p_token: s.token });
     session.set({ ...s, ...me });
+
+    // The login window closed while this admin was signed in.
+    if (me.in_window === false) {
+      session.clear();
+      flash.set(`Your login hours (${me.window} IST) have ended.`);
+      db.rpc("admin_logout", { p_token: s.token }).catch(() => {});
+      location.replace("adminlogin.html");
+      return null;
+    }
+    if (!me.approved && !allowPending) {
+      location.replace("pending.html");
+      return null;
+    }
     if (superOnly && me.role !== "super") {
       location.replace("dashboard.html");
       return null;
@@ -250,7 +290,7 @@
   }
 
   window.App = {
-    cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems,
+    cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems, flash,
     methodLabel, renderQR, printReceipt, whatsappUrl, applySettings, upiConfigured,
     printHtml, printShiftReport, cashDiff, settingsReady,
   };

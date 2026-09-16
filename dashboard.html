@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=13" />
+  <link rel="stylesheet" href="css/style.css?v=14" />
 </head>
 <body>
   <header class="topbar">
@@ -26,6 +26,11 @@
   <main class="container">
     <h1 id="greeting">Dashboard</h1>
     <p class="muted" style="margin-bottom:1.5rem">What would you like to do?</p>
+
+    <section class="card approve-bar hidden" id="approve-bar" hidden>
+      <h3>Waiting to be let in</h3>
+      <div id="approve-rows"></div>
+    </section>
 
     <section class="card shift-bar" id="shift-bar">
       <div class="grow">
@@ -267,9 +272,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=13"></script>
-  <script src="js/common.js?v=13"></script>
-  <script src="js/notify.js?v=13"></script>
+  <script src="js/config.js?v=14"></script>
+  <script src="js/common.js?v=14"></script>
+  <script src="js/notify.js?v=14"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -301,6 +306,7 @@
             c.addEventListener("click", () => toast("Only super admin can access this.", "error"));
           });
         }
+        if (me.role === "super") watchApprovals();
         loadPending();
         loadShift();
         loadLowStock();
@@ -309,6 +315,49 @@
         toast(err.message, "error");
       }
     })();
+
+    // ---------- Admins waiting to be let in (super admin) ----------
+    // The list itself lives in js/notify.js, which keeps it fresh from the
+    // "admin-logins" Realtime topic; this only draws it.
+    function watchApprovals() {
+      App.approvals.onChange(renderApprovals);
+
+      // Opened from a notification button with no page already open.
+      const q = new URLSearchParams(location.search);
+      const approve = q.get("approve");
+      const deny = q.get("deny");
+      if (approve || deny) {
+        history.replaceState(null, "", location.pathname);
+        App.approvals[approve ? "approve" : "deny"](approve || deny);
+      }
+    }
+
+    function renderApprovals(list) {
+      const bar = document.getElementById("approve-bar");
+      bar.hidden = !list.length;
+      bar.classList.toggle("hidden", !list.length);
+      document.getElementById("approve-rows").innerHTML = list
+        .map(
+          (w) => `<div class="approve-row">
+            <div class="grow">
+              <strong>${esc(w.username)}</strong>
+              <div class="muted">Signed in ${fmtDate(w.created_at)}${w.login_window ? ` · hours ${esc(w.login_window)}` : ""}</div>
+            </div>
+            <button class="btn btn-sm" data-approve="${w.session_id}">Approve</button>
+            <button class="btn btn-ghost btn-sm" data-deny="${w.session_id}">Deny</button>
+          </div>`
+        )
+        .join("");
+    }
+
+    document.getElementById("approve-rows").addEventListener("click", (e) => {
+      const yes = e.target.closest("[data-approve]");
+      const no = e.target.closest("[data-deny]");
+      if (!yes && !no) return;
+      e.target.disabled = true;
+      if (yes) App.approvals.approve(yes.dataset.approve);
+      else App.approvals.deny(no.dataset.deny);
+    });
 
     // ---------- Awaiting payment ----------
     async function loadPending() {

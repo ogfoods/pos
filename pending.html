@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Waiting for approval</title>
+  <meta name="theme-color" content="#d9480f" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="stylesheet" href="css/style.css?v=14" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <span class="muted" id="who"></span>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+    </div>
+  </header>
+
+  <main class="auth-wrap">
+    <section class="card wait-card">
+      <div class="wait-dot" aria-hidden="true"></div>
+      <h1>Waiting for approval</h1>
+      <p class="muted" id="wait-text">A super admin has to allow this sign-in before you can start billing.</p>
+      <button class="btn btn-block wait-refresh" type="button" id="refresh-btn">Refresh</button>
+      <p class="muted wait-hint">Tap Refresh once they have approved you.</p>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=14"></script>
+  <script src="js/common.js?v=14"></script>
+  <script src="js/notify.js?v=14"></script>
+  <script>
+    const { esc, toast } = App;
+    const $ = (id) => document.getElementById(id);
+
+    (async () => {
+      try {
+        const me = await App.requireAdmin({ allowPending: true });
+        if (!me) return;
+        // Approved between the login and this page loading: go straight through.
+        if (me.approved) {
+          location.replace("dashboard.html");
+          return;
+        }
+        $("who").textContent = me.username;
+        if (me.window) {
+          $("wait-text").insertAdjacentHTML(
+            "beforeend",
+            ` Your login hours are <strong>${esc(me.window)} IST</strong>.`
+          );
+        }
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    $("refresh-btn").addEventListener("click", () => location.reload());
+  </script>
+</body>
+</html>

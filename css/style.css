@@ -596,3 +596,35 @@ td.num, th.num { text-align: right; }
 .toast { padding: .75rem 1rem; border-radius: 10px; background: var(--text); color: var(--bg); box-shadow: var(--shadow); font-weight: 500; }
 .toast-error { background: var(--danger); color: #fff; }
 .toast-success { background: var(--success); color: #fff; }
+
+/* ---------- Waiting for approval (pending.html) ---------- */
+.wait-card { width: 100%; max-width: 420px; text-align: center; padding: 2rem 1.5rem; }
+.wait-card h1 { margin: .75rem 0 .5rem; font-size: 1.5rem; }
+.wait-dot {
+  width: 56px; height: 56px; margin: 0 auto; border-radius: 50%;
+  background: var(--primary-soft); border: 3px solid var(--primary);
+  animation: wait-pulse 1.8s ease-in-out infinite;
+}
+@keyframes wait-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(.88); opacity: .55; }
+}
+@media (prefers-reduced-motion: reduce) { .wait-dot { animation: none; } }
+.wait-refresh { margin-top: 1.5rem; font-size: 1.05rem; padding-block: .9rem; }
+.wait-hint { margin: .75rem 0 0; font-size: .85rem; }
+
+/* ---------- Sign-ins waiting for approval (dashboard, toast) ---------- */
+.approve-bar { display: grid; gap: .6rem; padding: .9rem 1.1rem; margin-bottom: 1rem; border-left: 4px solid var(--primary); }
+.approve-bar h3 { margin: 0; font-size: 1rem; }
+.approve-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.approve-row .grow { flex: 1; min-width: 11rem; }
+.approve-row .muted { font-size: .85rem; }
+.toast-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.toast-actions .btn { flex: 1; padding: .35rem .6rem; font-size: .85rem; }
+
+/* ---------- Login hours (staff) ---------- */
+.hours-cell { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.badge-waiting { background: var(--primary-soft); color: var(--primary); }
+.time-range { display: flex; align-items: center; gap: .4rem; }
+.time-range .input { padding-inline: .5rem; }
+.time-range span { color: var(--muted); }

@@ -6,13 +6,14 @@
  * Bump CACHE whenever the precached files change; the old cache is deleted on
  * activate and every client gets the new shell on its next load.
  */
-const CACHE = "pos-shell-v2";
+const CACHE = "pos-shell-v3";
 
 // Relative to the service worker scope.
 const SHELL = [
   "./",
   "index.html",
   "adminlogin.html",
+  "pending.html",
   "dashboard.html",
   "managebills.html",
   "menu.html",
@@ -104,12 +105,30 @@ self.addEventListener("fetch", (e) => {
 
 // Notifications are shown through the registration (the Notification
 // constructor is unavailable on Android Chrome), so the click lands here.
+// A sign-in alert carries Approve / Deny buttons; answering one is relayed to
+// an open page, which has the super admin's token. With no page open, the
+// dashboard is opened with the answer in the URL and acts on it there.
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
-  const target = e.notification.data && e.notification.data.url;
+  const data = e.notification.data || {};
+  const action = e.action;
+
   e.waitUntil(
     (async () => {
       const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+
+      if ((action === "approve" || action === "deny") && data.sessionId) {
+        if (clients.length) {
+          clients.forEach((c) => c.postMessage({ type: "approval", action, sessionId: data.sessionId }));
+          return clients[0].focus();
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(`dashboard.html?${action}=${data.sessionId}`);
+        }
+        return;
+      }
+
+      const target = data.url;
       for (const c of clients) {
         if ("focus" in c) {
           if (target && "navigate" in c) await c.navigate(target).catch(() => {});

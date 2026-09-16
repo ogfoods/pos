@@ -15,10 +15,11 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `menu.html` | Super admin | Add / edit / hide / delete menu items, link ingredients to each item |
 | `ingredients.html` | Super admin | Ingredients, stock (purchase / waste / count), low-stock alerts, history |
 | `usage.html` | Super admin | Ingredients consumed per day (IST), CSV export |
-| `staff.html` | Super admin | Add users, change roles, reset passwords, sign out devices |
+| `staff.html` | Super admin | Add users, change roles, reset passwords, set login hours, auto-allow, sign out devices |
 | `settings.html` | Super admin | Shop name, address, phone, UPI ID, currency, receipt footer |
 | `audit.html` | Super admin | Who changed bills, menu, recipes, ingredients, staff, settings |
 | `account.html` | All admins | Change own password |
+| `pending.html` | Admins | Waiting room until a super admin allows the sign-in |
 | `offline.html` | Everyone | Shown when a page is opened with no connection |
 | `kitchen.html` | All admins | Kitchen display: live queue new → preparing → ready → served, late colours, chime |
 | `sales.html` | Super admin | Sales by day/hour, payment methods, top items, staff, shift closes |
@@ -61,6 +62,24 @@ Android an **Install app** button appears in the top bar; on iOS use Safari's
 and pages already visited still open without a connection. Live data (bills, the
 kitchen board, the menu) always needs the internet.
 
+## Controlling when admins can work
+
+On the **Staff** page each admin account has:
+
+- **Login hours** — a daily from/to in IST. Outside it the password is refused,
+  and an admin already signed in is dropped the moment the window closes. Blank
+  means any time. `17:00`–`02:00` wraps past midnight.
+- **Auto allow** — a checkbox next to the account. Ticked, sign-ins go straight
+  through. Unticked, each sign-in lands on a waiting page until a super admin
+  approves it from the dashboard banner or the sign-in alert. Approval covers
+  that one device and lasts to the end of that day's login hours.
+- **Sign out** — removes every session for that user, on all devices.
+
+Super admins are never gated. Accounts that already existed when migration 013
+was run keep working: they are all set to auto allow until you untick them.
+
+Requires migration `013_login_hours_approval.sql`.
+
 ## Sign-in alerts
 
 Super admins are notified when anyone signs in. The 🔔 button in the top bar turns
@@ -76,6 +95,7 @@ built yet.
 - All tables have RLS on with no policies; browser talks only to `SECURITY DEFINER` RPC functions.
 - Login returns a 12-hour session token; admin/super checks happen in the database, not just the UI.
 - Login is rate-limited (5 failures per username / 20 per IP in 15 minutes).
+- Login hours and the approval step are enforced in the database on every call, not only at login.
 - Super admin changes are recorded in an audit log.
 - Sign-in alerts broadcast an empty Realtime ping; who signed in is fetched with `recent_logins`, which requires a super admin token.
 - Order totals are computed server-side from menu prices.
