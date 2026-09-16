@@ -411,8 +411,8 @@ sequenceDiagram
 ## Frontend design
 
 - **Navigation:** every signed-in admin page gets the same shell from `js/shell.js`, mounted by `requireAdmin`. A round avatar sits in the top bar; tapping it opens a right-hand drawer with the whole menu and Logout. The old name chip, Account link and Logout button are gone from the page markup. `NAV` in that file is the single list of destinations; `super: true` items are dropped for plain admins.
-- **Bottom bar:** at 900px and below the dashboard's bento grid is hidden and a fixed bottom bar takes over, phone-app style: the four `bar: true` destinations plus **More**, which opens the drawer. A plain admin gets four and no More. **New bill** clicks the dashboard's own card when it is on the page, otherwise it goes to `dashboard.html#new-bill`, which opens the modal on arrival.
-- **Responsive:** CSS grid bento layout collapses from 3 → 2 → 1 columns (breakpoints 760px, 460px), and below 900px the bottom bar replaces it. Tables scroll horizontally inside `.table-wrap`. The modal is centred with `100dvh`-based max height so mobile browser bars don't clip the footer.
+- **Bottom bar:** at 900px and below every bento card except **New bill** is hidden and a fixed bottom bar takes over, phone-app style: the `bar: true` destinations plus **More**, which opens the drawer. New bill is in neither the bar nor the drawer — its card stays on the home page under the shift bar, because it is the one thing done all day.
+- **Responsive:** CSS grid bento layout collapses from 3 → 2 → 1 columns (breakpoints 760px, 460px), and below 900px only the New bill card is left, with the bottom bar carrying the rest. Tables scroll horizontally inside `.table-wrap`. The modal is centred with `100dvh`-based max height so mobile browser bars don't clip the footer.
 - **Theming:** CSS custom properties in `:root`, overridden under `prefers-color-scheme: dark`.
 - **No build step:** no bundler or framework; edit files and push.
 

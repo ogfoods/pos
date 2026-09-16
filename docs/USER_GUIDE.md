@@ -434,7 +434,7 @@ where username = 'owner';
 
 ## 8. Using on phones and tablets
 
-- On phones and tablets the dashboard cards are replaced by a fixed bar along the bottom — Home, New bill, Kitchen, Bills and More — the way a food-delivery app works. **More** opens the same menu as the avatar.
+- On phones and tablets the dashboard keeps the big **New bill** card and moves everything else to a fixed bar along the bottom — Home, Kitchen, Bills, My account and More — the way a food-delivery app works. **More** opens the same menu as the avatar.
 - The round button with your initial, top right, opens a menu with every page you can use, plus **Logout**.
 - On phones the New bill window opens full-screen with an app-style layout: numbered steps, category chips, item photos, and a cart bar at the bottom. On larger screens it opens as a compact centred window.
 - Dark mode follows the device setting.

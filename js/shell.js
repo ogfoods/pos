@@ -10,7 +10,6 @@
 
   const ICON = {
     home: svg(`<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>`),
-    bill: svg(`<path d="M6 2.5h12v19l-2.5-2-2.5 2-3-2-2.5 2-1.5-1.2z"/><path d="M9 8h6M9 12h6M9 16h3"/>`),
     kitchen: svg(`<path d="M7 21V10"/><path d="M5 3v5a2 2 0 0 0 4 0V3"/><path d="M7 3v5"/><path d="M17 21V3c-1.8 1-3 3.4-3 6.5S15.2 14 17 14"/>`),
     folder: svg(`<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>`),
     menu: svg(`<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H19v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M8 8.5h7M8 12h7M8 15.5h4"/>`),
@@ -28,9 +27,9 @@
 
   // Everything an admin can reach. `super` items are dropped for plain admins.
   // `bar` marks the ones that earn a slot in the bottom bar.
+  // New bill is deliberately absent: its card stays on the home page.
   const NAV = [
     { id: "home", href: "dashboard.html", icon: ICON.home, label: "Home", bar: true },
-    { id: "new-bill", action: "new-bill", icon: ICON.bill, label: "New bill", bar: true },
     { id: "kitchen", href: "kitchen.html", icon: ICON.kitchen, label: "Kitchen", bar: true },
     { id: "bills", href: "managebills.html", icon: ICON.folder, label: "Bills", super: true, bar: true },
     { id: "menu", href: "menu.html", icon: ICON.menu, label: "Menu", super: true },
@@ -59,13 +58,7 @@
   const isCurrent = (n) => n.href === here || (here === "" && n.href === "dashboard.html");
 
   function go(n) {
-    if (n.action === "new-bill") {
-      const card = document.getElementById("card-new-bill");
-      if (card) card.click();
-      else location.href = "dashboard.html#new-bill";
-      return;
-    }
-    if (!isCurrent(n)) location.href = n.href;
+    if (n && !isCurrent(n)) location.href = n.href;
   }
 
   // ---------------------------------------------------------------- avatar
@@ -176,8 +169,7 @@
     nav.innerHTML =
       picks
         .map(
-          (n) => `<button class="bottom-item${isCurrent(n) ? " current" : ""}${n.action === "new-bill" ? " accent" : ""}"
-            type="button" data-nav="${n.id}">
+          (n) => `<button class="bottom-item${isCurrent(n) ? " current" : ""}" type="button" data-nav="${n.id}">
             <span class="bottom-icon">${n.icon}</span><span class="bottom-label">${App.esc(n.label)}</span></button>`
         )
         .join("") +

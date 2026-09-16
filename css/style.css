@@ -681,8 +681,11 @@ td.num, th.num { text-align: right; }
 /* ---------- Bottom bar (phones and tablets) ---------- */
 .bottom-nav { display: none; }
 @media (max-width: 900px) {
-  /* The bento grid is replaced by the bar, the way a phone app works. */
-  .bento { display: none; }
+  /* The bar replaces the bento grid, the way a phone app works. New bill
+     stays on the home page, since it is the one thing done all day. */
+  .bento { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 0; }
+  .bento-card:not(.primary) { display: none; }
+  .bento-card.primary { grid-column: 1; grid-row: auto; }
   .topbar-right > a[href="dashboard.html"] { display: none; }
 
   .bottom-nav {
@@ -702,8 +705,6 @@ td.num, th.num { text-align: right; }
   .bottom-icon svg { width: 24px; height: 24px; }
   .bottom-item.current { color: var(--primary); }
   .bottom-item.current .bottom-icon { background: var(--primary-soft); border-radius: 999px; width: 44px; }
-  .bottom-item.accent .bottom-icon { background: var(--primary); color: #fff; border-radius: 999px; width: 44px; height: 28px; }
-  .bottom-item.accent { color: var(--primary); font-weight: 600; }
   .bottom-label { white-space: nowrap; }
 
   body.has-bottom-nav { padding-bottom: calc(4.4rem + env(safe-area-inset-bottom)); }

@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=15" />
+  <link rel="stylesheet" href="css/style.css?v=16" />
 </head>
 <body>
   <header class="topbar">
@@ -269,10 +269,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=15"></script>
-  <script src="js/common.js?v=15"></script>
-  <script src="js/notify.js?v=15"></script>
-  <script src="js/shell.js?v=15"></script>
+  <script src="js/config.js?v=16"></script>
+  <script src="js/common.js?v=16"></script>
+  <script src="js/notify.js?v=16"></script>
+  <script src="js/shell.js?v=16"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -306,11 +306,6 @@
         loadPending();
         loadShift();
         loadLowStock();
-        // Arrived from the bottom bar on another page.
-        if (location.hash === "#new-bill") {
-          history.replaceState(null, "", location.pathname);
-          document.getElementById("card-new-bill").click();
-        }
         setInterval(() => { if (!document.hidden) { loadPending(); loadShift(); loadLowStock(); } }, 60000);
       } catch (err) {
         toast(err.message, "error");
