@@ -240,8 +240,10 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 
 @media (max-width: 560px) {
   /* Anchored to the top and shortened by the keyboard, so the cart bar and
-     Next button stay just above it instead of being buried under it. */
-  .bill-backdrop { padding: 0; align-items: flex-start; }
+     Next button stay just above it instead of being buried under it. The
+     backdrop is opaque, so the strip the keyboard leaves behind is plain
+     surface rather than the dashboard showing through. */
+  .bill-backdrop { padding: 0; align-items: flex-start; background: var(--surface); }
   .bill {
     max-width: none; max-height: none; border-radius: 0; overflow: hidden;
     height: calc(100% - var(--kb, 0px));
