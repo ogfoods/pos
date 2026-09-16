@@ -188,6 +188,83 @@
     setTimeout(() => t.remove(), 3500);
   }
 
+  // In-app replacement for window.confirm / window.prompt, styled like the
+  // rest of the app. Resolves to the typed text (prompt), true (confirm), or
+  // null when cancelled. Esc, the Cancel button and a click outside all cancel.
+  let dialogSeq = 0;
+  function dialog({ title, message = "", okText = "OK", cancelText = "Cancel", danger = false, input = null }) {
+    return new Promise((resolve) => {
+      const id = "dlg" + ++dialogSeq;
+      const back = document.createElement("div");
+      back.className = "modal-backdrop dialog-backdrop";
+      back.setAttribute("role", "alertdialog");
+      back.setAttribute("aria-modal", "true");
+      back.setAttribute("aria-labelledby", id + "-t");
+      back.setAttribute("aria-describedby", id + "-m");
+      back.innerHTML = `
+        <div class="modal dialog">
+          <div class="modal-head"><h3 id="${id}-t">${esc(title)}</h3></div>
+          <div class="modal-body">
+            <p class="dialog-msg" id="${id}-m">${esc(message)}</p>
+            ${input
+              ? `<input class="input" id="${id}-i" type="${esc(input.type || "text")}"
+                   inputmode="${esc(input.inputmode || "text")}" enterkeyhint="done"
+                   placeholder="${esc(input.placeholder || "")}" value="${esc(input.value || "")}"
+                   aria-label="${esc(input.label || title)}" />`
+              : ""}
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" type="button" data-act="cancel">${esc(cancelText)}</button>
+            <button class="btn ${danger ? "btn-danger-solid" : ""}" type="button" data-act="ok">${esc(okText)}</button>
+          </div>
+        </div>`;
+
+      const field = input ? back.querySelector("input") : null;
+      const before = document.activeElement;
+
+      const finish = (ok) => {
+        window.removeEventListener("keydown", onKey, true);
+        back.remove();
+        if (before && before.focus) before.focus();
+        resolve(ok ? (field ? field.value : true) : null);
+      };
+      // Captured on window and stopped, so Esc here never also reaches a page
+      // handler underneath (the bill modal closes itself on Esc, for one).
+      const onKey = (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(false);
+        } else if (e.key === "Enter" && field && document.activeElement === field) {
+          e.preventDefault();
+          e.stopPropagation();
+          finish(true);
+        } else if (e.key === "Tab") {
+          // Keep focus inside the dialog.
+          const f = [...back.querySelectorAll("input, button")];
+          const i = f.indexOf(document.activeElement);
+          const next = e.shiftKey ? (i <= 0 ? f.length - 1 : i - 1) : (i + 1) % f.length;
+          e.preventDefault();
+          f[next].focus();
+        }
+      };
+
+      back.addEventListener("click", (e) => {
+        if (e.target === back) return finish(false);
+        const b = e.target.closest("[data-act]");
+        if (b) finish(b.dataset.act === "ok");
+      });
+      window.addEventListener("keydown", onKey, true);
+      document.body.appendChild(back);
+      // Destructive actions start on Cancel, so a stray Enter does no harm.
+      (field || back.querySelector(danger ? '[data-act="cancel"]' : '[data-act="ok"]')).focus();
+      if (field) field.select();
+    });
+  }
+
+  const confirmDialog = (opts) => dialog(opts).then((r) => r !== null);
+  const promptDialog = (opts) => dialog({ ...opts, input: opts.input || {} });
+
   // Points a link at the WhatsApp receipt, or greys it out when the order has
   // no phone number (bills for walk-ins can be saved without one).
   function setWhatsapp(el, order) {
@@ -329,6 +406,7 @@
   window.App = {
     cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems, flash,
     methodLabel, renderQR, printReceipt, whatsappUrl, setWhatsapp, applySettings, upiConfigured,
+    confirm: confirmDialog, prompt: promptDialog,
     printHtml, printShiftReport, cashDiff, settingsReady,
   };
 })();

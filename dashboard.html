@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -271,10 +271,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/common.js?v=19"></script>
-  <script src="js/notify.js?v=19"></script>
-  <script src="js/shell.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/common.js?v=20"></script>
+  <script src="js/notify.js?v=20"></script>
+  <script src="js/shell.js?v=20"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -501,9 +501,14 @@
 
     el("shift-close-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const pendingCount = shift && shift.totals.pending_count;
-      if (pendingCount && !confirm(`${pendingCount} UPI bill(s) are still pending. Close the shift anyway?`)) return;
+      // currentTarget is gone once we await, so take the button first.
       const btn = e.currentTarget.querySelector("button[type=submit]");
+      const pendingCount = shift && shift.totals.pending_count;
+      if (pendingCount && !(await App.confirm({
+        title: "Close the shift?",
+        message: `${pendingCount} UPI bill${pendingCount === 1 ? " is" : "s are"} still waiting for payment.`,
+        okText: "Close shift",
+      }))) return;
       btn.disabled = true;
       try {
         closedShift = await rpc("close_shift", {
@@ -571,8 +576,24 @@
       loadMenu();
     }
 
-    function closeBill() {
-      if (cart.size && !confirm("Discard this bill?")) return;
+    // Set while the discard question is up, so a second close (Esc, the ×)
+    // does not stack another dialog on top of it.
+    let askingDiscard = false;
+
+    async function closeBill() {
+      if (askingDiscard) return;
+      if (cart.size) {
+        askingDiscard = true;
+        const ok = await App.confirm({
+          title: "Discard this bill?",
+          message: "The items you picked will be cleared.",
+          okText: "Discard",
+          cancelText: "Keep billing",
+          danger: true,
+        });
+        askingDiscard = false;
+        if (!ok) return;
+      }
       modal.classList.add("hidden");
       document.body.style.overflow = "";
     }

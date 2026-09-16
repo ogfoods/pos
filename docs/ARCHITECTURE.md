@@ -82,12 +82,15 @@ Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `c
 | `logout()` | Deletes the server session and returns to login |
 | `money`, `fmtDate`, `esc`, `digits` | Formatting, HTML escaping, phone normalisation |
 | `toast(msg, type)` | Small notification popup |
+| `confirm({title, message, okText, cancelText, danger})` | In-app replacement for `window.confirm`; resolves `true`/`false`. `danger` gives a red OK button and starts focus on Cancel. Centred on desktop, bottom sheet on phones. Esc, Cancel and a click outside all cancel. The page code must not call the native `confirm`/`prompt`/`alert` |
+| `prompt({title, message, okText, input: {type, inputmode, placeholder, value, label}})` | In-app replacement for `window.prompt`; resolves the typed text or `null`. Enter submits |
 | `renderItems(items)` | Renders order line items as a list |
 | `methodLabel(m)` | `cash`/`upi`/`card` → display label |
 | `renderQR(el, amount)` | Draws the UPI payment QR for an amount |
 | `printReceipt(order)` | Fills a hidden `#receipt-print` block (58 mm layout, print-only CSS) and opens the print dialog |
 | `printShiftReport(shift)`, `cashDiff(d)` | 58 mm shift report; counted − expected → Short by / Over by / Exact match |
 | `whatsappUrl(order)` | `wa.me` link with the bill summary; prefixes `COUNTRY_CODE` to 10-digit phones |
+| `setWhatsapp(el, order)` | Points a link at `whatsappUrl(order)`, or greys it out (`aria-disabled`, no `href`) when the order has no phone |
 
 ## Database design
 

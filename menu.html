@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -92,10 +92,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/common.js?v=19"></script>
-  <script src="js/notify.js?v=19"></script>
-  <script src="js/shell.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/common.js?v=20"></script>
+  <script src="js/notify.js?v=20"></script>
+  <script src="js/shell.js?v=20"></script>
   <script>
     const { rpc, money, esc, toast } = App;
     let me, items = [], recipes = {}, ingredients = [], stock = { items: {} };
@@ -214,7 +214,12 @@
       }
       if (del) {
         const i = items.find((x) => x.id === Number(del.dataset.del));
-        if (!confirm(`Delete “${i.name}”? Past bills keep their item names. Tip: untick "Available" to just hide it.`)) return;
+        if (!(await App.confirm({
+          title: `Delete “${i.name}”?`,
+          message: "Past bills keep their item names.\nTo take it off the menu for now, untick Available instead.",
+          okText: "Delete",
+          danger: true,
+        }))) return;
         try {
           await rpc("delete_menu_item", { p_token: me.token, p_id: i.id });
           toast("Item deleted", "success");

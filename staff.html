@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -75,10 +75,10 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/common.js?v=19"></script>
-  <script src="js/notify.js?v=19"></script>
-  <script src="js/shell.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/common.js?v=20"></script>
+  <script src="js/notify.js?v=20"></script>
+  <script src="js/shell.js?v=20"></script>
   <script>
     const { rpc, esc, toast, fmtDate } = App;
     const $ = (id) => document.getElementById(id);
@@ -179,7 +179,11 @@
       const password = $("password").value;
       const current = id && users.find((u) => u.id === id);
       if (current && !current.is_me && password &&
-          !confirm(`Set a new password for ${current.username}? They will be signed out on all devices.`)) return;
+          !(await App.confirm({
+            title: `Set a new password for ${current.username}?`,
+            message: "They will be signed out on all devices.",
+            okText: "Set password",
+          }))) return;
 
       const btn = $("save-btn");
       btn.disabled = true;
@@ -248,8 +252,14 @@
       }
       if (out) {
         const u = users.find((x) => x.id === Number(out.dataset.signout));
-        const msg = u.is_me ? "Sign yourself out on all other devices?" : `Sign ${u.username} out on all devices?`;
-        if (!confirm(msg)) return;
+        if (!(await App.confirm({
+          title: u.is_me ? "Sign out your other devices?" : `Sign ${u.username} out?`,
+          message: u.is_me
+            ? "This device stays signed in."
+            : "Every device they are signed in on, including any waiting for approval.",
+          okText: "Sign out",
+          danger: true,
+        }))) return;
         try {
           const n = await rpc("revoke_admin_sessions", { p_token: me.token, p_id: u.id });
           toast(`${n} session(s) signed out`, "success");

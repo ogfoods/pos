@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -126,10 +126,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/common.js?v=19"></script>
-  <script src="js/notify.js?v=19"></script>
-  <script src="js/shell.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/common.js?v=20"></script>
+  <script src="js/notify.js?v=20"></script>
+  <script src="js/shell.js?v=20"></script>
   <script>
     const { rpc, esc, toast, fmtDate } = App;
     let me, items = [];
@@ -209,7 +209,11 @@
       const unit = $("ing-unit").value;
       const current = id && items.find((x) => x.id === id);
       if (current && current.unit !== unit && (current.used_count || current.track_stock) &&
-          !confirm(`Changing the unit of “${current.name}” does not convert its recipe quantities or stock. Continue?`)) return;
+          !(await App.confirm({
+            title: `Change the unit of “${current.name}”?`,
+            message: "Recipe quantities and stock are not converted. They keep their numbers under the new unit.",
+            okText: "Change unit",
+          }))) return;
 
       const btn = $("save-btn");
       btn.disabled = true;
@@ -244,7 +248,12 @@
       if (del) {
         const i = items.find((x) => x.id === Number(del.dataset.del));
         const warn = i.used_count ? ` It will be removed from ${i.used_count} menu item recipe(s).` : "";
-        if (!confirm(`Delete “${i.name}”?${warn} Its stock history is deleted too. Past orders keep their ingredient history.`)) return;
+        if (!(await App.confirm({
+          title: `Delete “${i.name}”?`,
+          message: `${warn.trim() ? warn.trim() + "\n" : ""}Its stock history is deleted too. Past orders keep their ingredient history.`,
+          okText: "Delete",
+          danger: true,
+        }))) return;
         try {
           await rpc("delete_ingredient", { p_token: me.token, p_id: i.id });
           toast("Ingredient deleted", "success");

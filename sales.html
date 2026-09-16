@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -86,10 +86,10 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/common.js?v=19"></script>
-  <script src="js/notify.js?v=19"></script>
-  <script src="js/shell.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/common.js?v=20"></script>
+  <script src="js/notify.js?v=20"></script>
+  <script src="js/shell.js?v=20"></script>
   <script>
     const { rpc, money, esc, toast, fmtDate, methodLabel, cashDiff } = App;
     const $ = (id) => document.getElementById(id);
@@ -330,7 +330,12 @@
       if (print) return App.printShiftReport(shifts.find((s) => s.id === Number(print.dataset.print)));
       if (!close) return;
       const s = shifts.find((x) => x.id === Number(close.dataset.close));
-      const input = prompt(`Close ${s.username}'s shift.\nExpected cash so far: ${money(s.expected_cash)}\n\nCash counted in the drawer:`);
+      const input = await App.prompt({
+        title: `Close ${s.username}'s shift`,
+        message: `Expected cash so far: ${money(s.expected_cash)}\nEnter the cash counted in the drawer.`,
+        okText: "Close shift",
+        input: { type: "text", inputmode: "decimal", placeholder: "0.00", label: "Cash counted" },
+      });
       if (input === null) return;
       const counted = Number(input.replace(/[^\d.]/g, ""));
       if (input.trim() === "" || Number.isNaN(counted)) return toast("Enter the counted cash as a number.", "error");

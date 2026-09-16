@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=19" />
+  <link rel="stylesheet" href="css/style.css?v=20" />
 </head>
 <body>
   <header class="topbar">
@@ -60,10 +60,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=19"></script>
-  <script src="js/common.js?v=19"></script>
-  <script src="js/notify.js?v=19"></script>
-  <script src="js/shell.js?v=19"></script>
+  <script src="js/config.js?v=20"></script>
+  <script src="js/common.js?v=20"></script>
+  <script src="js/notify.js?v=20"></script>
+  <script src="js/shell.js?v=20"></script>
   <script>
     const { rpc, money, fmtDate, esc, toast, renderItems, methodLabel } = App;
     const PAGE = 25;
@@ -145,7 +145,12 @@
       if (view) return openDetail(Number(view.dataset.view));
       if (del) {
         const id = Number(del.dataset.del);
-        if (!confirm(`Delete order #${id}? This cannot be undone.`)) return;
+        if (!(await App.confirm({
+          title: `Delete order #${id}?`,
+          message: "This cannot be undone.",
+          okText: "Delete",
+          danger: true,
+        }))) return;
         try {
           await rpc("delete_order", { p_token: me.token, p_id: id });
           toast(`Order #${id} deleted`, "success");

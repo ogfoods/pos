@@ -735,3 +735,23 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 .btn.is-disabled, .btn[aria-disabled="true"] {
   opacity: .45; cursor: not-allowed; pointer-events: none;
 }
+
+/* ---------- In-app confirm / prompt (App.confirm, App.prompt) ---------- */
+.dialog-backdrop { z-index: 70; }
+.modal.dialog { max-width: 420px; }
+.dialog .modal-head h3 { margin: 0; font-size: 1.1rem; }
+.dialog-msg { margin: 0; white-space: pre-line; line-height: 1.5; color: var(--muted); }
+.dialog .input { margin-top: 1rem; }
+.dialog .modal-foot { justify-content: flex-end; }
+.btn-danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger-solid:hover { background: var(--danger); filter: brightness(.92); }
+@media (max-width: 560px) {
+  /* Bottom sheet on phones, like the rest of the app. */
+  .dialog-backdrop { align-items: flex-end; padding: 0; }
+  .modal.dialog { max-width: none; border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .dialog .modal-foot .btn { flex: 1; }
+}
+@media (max-width: 560px) {
+  .dialog-backdrop { padding-bottom: var(--kb, 0px); }
+}
+.dialog .btn:focus-visible, .dialog .btn:focus { outline: 3px solid var(--primary-soft); outline-offset: 1px; }
