@@ -11,14 +11,13 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=14" />
+  <link rel="stylesheet" href="css/style.css?v=15" />
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
     <div class="topbar-right">
       <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
-      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
     </div>
   </header>
 
@@ -63,9 +62,10 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=14"></script>
-  <script src="js/common.js?v=14"></script>
-  <script src="js/notify.js?v=14"></script>
+  <script src="js/config.js?v=15"></script>
+  <script src="js/common.js?v=15"></script>
+  <script src="js/notify.js?v=15"></script>
+  <script src="js/shell.js?v=15"></script>
   <script>
     const { rpc, esc, toast } = App;
     const $ = (id) => document.getElementById(id);

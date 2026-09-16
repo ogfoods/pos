@@ -11,15 +11,12 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=14" />
+  <link rel="stylesheet" href="css/style.css?v=15" />
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
     <div class="topbar-right">
-      <span id="who" class="muted"></span>
-      <a class="btn btn-ghost btn-sm" href="account.html">Account</a>
-      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
     </div>
   </header>
 
@@ -272,9 +269,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=14"></script>
-  <script src="js/common.js?v=14"></script>
-  <script src="js/notify.js?v=14"></script>
+  <script src="js/config.js?v=15"></script>
+  <script src="js/common.js?v=15"></script>
+  <script src="js/notify.js?v=15"></script>
+  <script src="js/shell.js?v=15"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -294,8 +292,6 @@
       try {
         me = await App.requireAdmin();
         if (!me) return;
-        document.getElementById("who").innerHTML =
-          `${esc(me.username)} <span class="badge ${me.role === "super" ? "badge-super" : ""}">${me.role === "super" ? "super admin" : "admin"}</span>`;
         document.getElementById("greeting").textContent = `Hi, ${me.username}`;
         if (me.role !== "super") {
           document.querySelectorAll(".super-only").forEach((c) => {
@@ -310,6 +306,11 @@
         loadPending();
         loadShift();
         loadLowStock();
+        // Arrived from the bottom bar on another page.
+        if (location.hash === "#new-bill") {
+          history.replaceState(null, "", location.pathname);
+          document.getElementById("card-new-bill").click();
+        }
         setInterval(() => { if (!document.hidden) { loadPending(); loadShift(); loadLowStock(); } }, 60000);
       } catch (err) {
         toast(err.message, "error");

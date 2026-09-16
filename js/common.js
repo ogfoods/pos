@@ -128,6 +128,8 @@
       return null;
     }
     const admin = { ...s, ...me };
+    // Avatar, side drawer and the phone bottom bar (js/shell.js).
+    window.App.shell?.mount(admin);
     // Super admins are told when anyone signs in (js/notify.js).
     if (me.role === "super") window.App.loginAlerts?.start(admin);
     return admin;

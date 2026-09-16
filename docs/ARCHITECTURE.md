@@ -58,7 +58,8 @@ POS_Billing/
 ├── js/
 │   ├── config.js       Supabase URL + publishable key; fallback shop settings
 │   ├── common.js       Shared helpers exposed as window.App
-│   └── notify.js       Service worker registration, install button, super admin sign-in alerts
+│   ├── notify.js       Service worker registration, install button, sign-in alerts and approvals
+│   └── shell.js       Profile avatar, side drawer and the phone/tablet bottom bar
 ├── supabase/
 │   └── schema.sql      Tables, RLS, functions, grants (run once in SQL Editor)
 └── docs/
@@ -66,7 +67,7 @@ POS_Billing/
     └── USER_GUIDE.md   Features and how to use them
 ```
 
-Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `common.js` → `notify.js` → an inline page script.
+Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `common.js` → `notify.js` → `shell.js` (admin pages only) → an inline page script.
 
 ### `js/common.js` (window.App)
 
@@ -409,7 +410,9 @@ sequenceDiagram
 
 ## Frontend design
 
-- **Responsive:** CSS grid bento layout collapses from 3 → 2 → 1 columns (breakpoints 760px, 460px). Tables scroll horizontally inside `.table-wrap`. The modal is centred with `100dvh`-based max height so mobile browser bars don't clip the footer.
+- **Navigation:** every signed-in admin page gets the same shell from `js/shell.js`, mounted by `requireAdmin`. A round avatar sits in the top bar; tapping it opens a right-hand drawer with the whole menu and Logout. The old name chip, Account link and Logout button are gone from the page markup. `NAV` in that file is the single list of destinations; `super: true` items are dropped for plain admins.
+- **Bottom bar:** at 900px and below the dashboard's bento grid is hidden and a fixed bottom bar takes over, phone-app style: the four `bar: true` destinations plus **More**, which opens the drawer. A plain admin gets four and no More. **New bill** clicks the dashboard's own card when it is on the page, otherwise it goes to `dashboard.html#new-bill`, which opens the modal on arrival.
+- **Responsive:** CSS grid bento layout collapses from 3 → 2 → 1 columns (breakpoints 760px, 460px), and below 900px the bottom bar replaces it. Tables scroll horizontally inside `.table-wrap`. The modal is centred with `100dvh`-based max height so mobile browser bars don't clip the footer.
 - **Theming:** CSS custom properties in `:root`, overridden under `prefers-color-scheme: dark`.
 - **No build step:** no bundler or framework; edit files and push.
 
@@ -420,7 +423,7 @@ sequenceDiagram
 3. Set values in `js/config.js`.
 4. Push to `main`; GitHub Pages publishes from the repository root.
 
-Cache busting: HTML pages load `css/style.css?v=N`, `js/config.js?v=N`, `js/common.js?v=N` and `js/notify.js?v=N`. After changing any CSS/JS file, bump `N` in every HTML page, and bump `CACHE` in `sw.js` so installed copies of the app fetch the new shell instead of serving the cached one.
+Cache busting: HTML pages load `css/style.css?v=N`, `js/config.js?v=N`, `js/common.js?v=N`, `js/notify.js?v=N` and `js/shell.js?v=N`. After changing any CSS/JS file, bump `N` in every HTML page, and bump `CACHE` in `sw.js` so installed copies of the app fetch the new shell instead of serving the cached one.
 
 Schema changes: update `schema.sql` (for fresh installs) and add a numbered file in `supabase/migrations/` for existing databases. Run new migration files in order in the SQL Editor, then commit both.
 

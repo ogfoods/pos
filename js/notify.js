@@ -309,8 +309,9 @@
   function renderBell() {
     if (!bell) return;
     const blocked = !supported || permission() === "denied";
-    const label = blocked ? "🔕 Alerts blocked" : on ? "🔔 Sign-in alerts" : "🔕 Sign-in alerts";
-    bell.textContent = label;
+    const label = blocked ? "Alerts blocked" : "Sign-in alerts";
+    // The label collapses to the emoji on narrow screens (see .btn-text).
+    bell.innerHTML = `<span aria-hidden="true">${on && !blocked ? "🔔" : "🔕"}</span><span class="btn-text">${label}</span>`;
     bell.title = blocked
       ? "Allow notifications for this site in your browser settings."
       : on
@@ -358,7 +359,8 @@
     btn.id = "install-btn";
     btn.type = "button";
     btn.className = "btn btn-ghost btn-sm";
-    btn.textContent = "⬇ Install app";
+    btn.innerHTML = `<span aria-hidden="true">⬇</span><span class="btn-text">Install app</span>`;
+    btn.setAttribute("aria-label", "Install app");
     btn.title = "Install this app on your device.";
     btn.addEventListener("click", async () => {
       if (!installEvent) return;
