@@ -63,22 +63,30 @@
   // -------------------------------------------------------------------
   // Chime (browsers need a tap before audio can play)
   // -------------------------------------------------------------------
+  // Three rising notes (C5, E5, G5), so it is not mistaken for the kitchen chime.
+  const NOTES = [523.25, 659.25, 783.99];
+  const NOTE_GAP = 0.13;
+  const NOTE_LEN = 0.22;
+
   let audioCtx = null;
   function chime() {
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === "suspended") audioCtx.resume();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 988;
-      const t0 = audioCtx.currentTime;
-      gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.35);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(t0);
-      osc.stop(t0 + 0.4);
+      const start = audioCtx.currentTime;
+      NOTES.forEach((hz, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = hz;
+        const t0 = start + i * NOTE_GAP;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.3, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + NOTE_LEN);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t0);
+        osc.stop(t0 + NOTE_LEN + 0.05);
+      });
     } catch {}
   }
 
