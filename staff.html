@@ -130,6 +130,7 @@
           <td><div class="row-actions">
             <button class="btn btn-ghost btn-sm" data-edit="${u.id}">Edit</button>
             <button class="btn btn-danger btn-sm" data-signout="${u.id}" ${u.active_sessions ? "" : "disabled"}>Sign out</button>
+            ${u.is_me ? "" : `<button class="btn btn-danger btn-sm" data-del="${u.id}">Delete</button>`}
           </div></td>
         </tr>`;
         })
@@ -230,6 +231,7 @@
     $("rows").addEventListener("click", async (e) => {
       const edit = e.target.closest("[data-edit]");
       const out = e.target.closest("[data-signout]");
+      const del = e.target.closest("[data-del]");
       if (edit) {
         const u = users.find((x) => x.id === Number(edit.dataset.edit));
         $("user-id").value = u.id;
@@ -263,6 +265,23 @@
         try {
           const n = await rpc("revoke_admin_sessions", { p_token: me.token, p_id: u.id });
           toast(`${n} session(s) signed out`, "success");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+      if (del) {
+        const u = users.find((x) => x.id === Number(del.dataset.del));
+        if (!(await App.confirm({
+          title: `Delete ${u.username}?`,
+          message: "The account is removed and signed out everywhere. Their past bills, shifts and audit history are kept.\nTo block access without deleting, untick Active instead.",
+          okText: "Delete user",
+          danger: true,
+        }))) return;
+        try {
+          await rpc("delete_admin", { p_token: me.token, p_id: u.id });
+          toast(`${u.username} deleted`, "success");
+          if (Number($("user-id").value) === u.id) resetForm();
           load();
         } catch (err) {
           toast(err.message, "error");

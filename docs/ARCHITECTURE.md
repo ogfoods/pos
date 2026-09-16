@@ -215,6 +215,7 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `list_admins(p_token)` | Super admin | Users with last login, active session count, `is_me` |
 | `upsert_admin(p_token, p_id, p_username, p_role, p_is_active, p_password, p_login_from, p_login_to, p_auto_approve)` | Super admin | Create (password required) or update (blank password keeps it). Can't demote/disable yourself. Role/password change or deactivation deletes that user's sessions; audited |
 | `revoke_admin_sessions(p_token, p_id)` | Super admin | Deletes a user's sessions (keeps the caller's); returns count; audited |
+| `delete_admin(p_token, p_id)` | Super admin | Deletes a user (cannot be yourself). FKs to admins are `on delete set null`/cascade, so bills, shifts and audit rows survive with a blank author; audited `staff.delete` |
 | `pending_logins(p_token)` | Super admin | Sign-ins still waiting: `{session_id, username, role, ip, created_at, login_window}`, oldest first. Sessions whose login hours have since ended are left out |
 | `approve_login(p_token, p_session_id)` | Super admin | Lets that one sign-in through; audited |
 | `deny_login(p_token, p_session_id)` | Super admin | Deletes that session, so the device is signed out; audited |

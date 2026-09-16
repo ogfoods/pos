@@ -317,8 +317,9 @@ The table shows every user with role, status (active / disabled), last login and
 | **Change a role** | **Edit** → pick the role → **Save**. The user is signed out and gets the new access at next login. |
 | **Disable a user** | **Edit** → untick **Active** → **Save**. They are signed out and cannot log in. Their past bills stay linked to them. |
 | **Sign out everywhere** | **Sign out** on the row (e.g. a lost phone). Your own current session is kept. |
+| **Delete a user** | **Delete** on the row → confirm. The account is removed and signed out everywhere. Their past bills, shifts and audit history are kept (shown with a blank author). To only block access, untick **Active** instead. |
 
-You cannot remove your own super admin role or disable yourself, so there is always at least one super admin.
+You cannot remove your own super admin role, disable yourself or delete your own account, so there is always at least one super admin. Deleting is permanent; disabling is the reversible option.
 
 ### 6.2 Shop settings
 

@@ -1510,6 +1510,26 @@ begin
   return n;
 end $$;
 
+-- Super admin: delete a user. Bills, shifts and audit rows are kept (their
+-- author becomes blank via on delete set null). Cannot delete yourself.
+create or replace function public.delete_admin(p_token uuid, p_id bigint)
+returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare a public.admins; v_user public.admins;
+begin
+  a := public._require_admin(p_token, true);
+  if p_id = a.id then
+    raise exception 'You cannot delete your own account.';
+  end if;
+  select * into v_user from public.admins where id = p_id;
+  if not found then raise exception 'User not found.'; end if;
+
+  perform public._audit(a, 'staff.delete', p_id::text,
+    jsonb_build_object('username', v_user.username, 'role', v_user.role));
+  delete from public.admins where id = p_id;
+end $$;
+
 -- Sign-ins waiting for a super admin, and the two ways to answer them.
 create or replace function public.pending_logins(p_token uuid)
 returns json
@@ -2362,7 +2382,7 @@ revoke all on function
   public.list_admins(uuid), public.upsert_admin(uuid, bigint, text, text, boolean, text, text, text, boolean),
   public.pending_logins(uuid), public.approve_login(uuid, bigint), public.deny_login(uuid, bigint),
   public.revoke_admin_sessions(uuid, bigint), public.change_my_password(uuid, text, text),
-  public.list_audit_log(uuid, text, text, int, int)
+  public.list_audit_log(uuid, text, text, int, int), public.delete_admin(uuid, bigint)
 from public;
 
 grant execute on function
@@ -2370,7 +2390,7 @@ grant execute on function
   public.list_admins(uuid), public.upsert_admin(uuid, bigint, text, text, boolean, text, text, text, boolean),
   public.pending_logins(uuid), public.approve_login(uuid, bigint), public.deny_login(uuid, bigint),
   public.revoke_admin_sessions(uuid, bigint), public.change_my_password(uuid, text, text),
-  public.list_audit_log(uuid, text, text, int, int)
+  public.list_audit_log(uuid, text, text, int, int), public.delete_admin(uuid, bigint)
 to anon, authenticated;
 
 revoke all on function
