@@ -543,6 +543,8 @@ begin
   delete from public.admin_sessions where expires_at < now();
   insert into public.admin_sessions(admin_id) values (a.id) returning * into s;
 
+  perform public._login_ping();
+
   return json_build_object('token', s.token, 'username', a.username,
                            'role', a.role, 'expires_at', s.expires_at);
 end $$;
@@ -551,6 +553,58 @@ create or replace function public.admin_logout(p_token uuid)
 returns void
 language sql security definer set search_path = public
 as $$ delete from public.admin_sessions where token = p_token; $$;
+
+-- Sign-in alerts: after a successful login, broadcast an empty "login" event
+-- on the public Realtime topic "admin-logins". It carries no data; super
+-- admin screens react by calling recent_logins() with their token. Never
+-- blocks a login: skipped when Realtime is unavailable, errors are swallowed.
+create or replace function public._login_ping()
+returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  begin
+    if to_regprocedure('realtime.send(jsonb, text, text, boolean)') is not null then
+      execute 'select realtime.send($1, $2, $3, false)' using '{}'::jsonb, 'login', 'admin-logins';
+    end if;
+  exception when others then
+    null;
+  end;
+end $$;
+
+-- Super admin: who signed in. Cursor based on login_attempts.id so no
+-- sign-in is shown twice.
+--   * p_after_id null  -> bootstrap: returns the current cursor, no rows
+--   * p_after_id given -> successful logins newer than that id
+-- Rows older than an hour are never returned, so a stale cursor kept in a
+-- browser cannot replay a day of logins as fresh alerts.
+create or replace function public.recent_logins(p_token uuid, p_after_id bigint default null)
+returns json
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v json;
+begin
+  perform public._require_admin(p_token, true);
+
+  select json_build_object(
+    'server_time', now(),
+    'last_id', coalesce((select max(id) from public.login_attempts where succeeded), 0),
+    'rows', case when p_after_id is null then '[]'::json else coalesce((
+      select json_agg(r order by r.id)
+      from (
+        select la.id, la.username, la.ip, la.created_at, coalesce(ad.role, 'admin') as role
+        from public.login_attempts la
+        left join public.admins ad on lower(ad.username) = la.username
+        where la.succeeded
+          and la.id > p_after_id
+          and la.created_at > now() - interval '1 hour'
+        order by la.id
+        limit 20
+      ) r), '[]'::json) end)
+  into v;
+
+  return v;
+end $$;
 
 create or replace function public.admin_me(p_token uuid)
 returns json
@@ -1797,6 +1851,10 @@ grant execute on function
 to anon, authenticated;
 
 revoke all on function public._kitchen_ping() from public, anon, authenticated;
+revoke all on function public._login_ping() from public, anon, authenticated;
+
+revoke all on function public.recent_logins(uuid, bigint) from public;
+grant execute on function public.recent_logins(uuid, bigint) to anon, authenticated;
 
 revoke all on function public.kitchen_orders(uuid), public.set_kitchen_status(uuid, bigint, text) from public;
 grant execute on function public.kitchen_orders(uuid), public.set_kitchen_status(uuid, bigint, text) to anon, authenticated;

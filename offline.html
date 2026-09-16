@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline</title>
+  <meta name="theme-color" content="#d9480f" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css?v=12" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+  </header>
+
+  <main class="container">
+    <section class="card" style="max-width:520px;margin:3rem auto;text-align:center">
+      <h1 style="margin-top:0">No connection</h1>
+      <p class="muted">
+        This page needs the internet. Bills, the kitchen board and the menu all read live data,
+        so they cannot load while the device is offline.
+      </p>
+      <p class="muted">Pages you already opened still work from the cache.</p>
+      <button class="btn" type="button" onclick="location.reload()">Try again</button>
+    </section>
+  </main>
+
+  <script>
+    // Reload as soon as the device is back online.
+    window.addEventListener("online", () => location.reload());
+  </script>
+</body>
+</html>

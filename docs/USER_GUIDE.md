@@ -335,13 +335,38 @@ A record of who did what and when, newest first:
 
 Filter with the area chips, or search by username, order number or item name. The log cannot be edited or deleted from the app.
 
-### 6.4 My account (all admins)
+### 6.4 Sign-in alerts
+
+**Where:** the 🔔 button at the top of any super admin page
+
+Tells you the moment anyone signs in to the app.
+
+1. Click **🔔 Sign-in alerts** once. The browser asks whether this site may show
+   notifications — choose **Allow**.
+2. From then on, each sign-in gives you a banner in the page, a short chime, and a
+   desktop notification with the username, role, time and IP address.
+3. Clicking the notification opens the app on the audit log.
+4. Click the bell again to turn alerts off. The choice is remembered on that device.
+
+Notes:
+
+- Your own sign-ins are not announced to you.
+- Alerts arrive only while the app is open in a tab or window (it can be minimised or
+  in the background, but not closed). Notifications with the app fully closed are not
+  built yet.
+- If the button says **🔕 Alerts blocked**, notifications were refused for this site
+  earlier. Allow them again in the browser's site settings (the padlock in the
+  address bar).
+- Every sign-in is also listed on the audit log, so nothing is lost if you miss an
+  alert.
+
+### 6.5 My account (all admins)
 
 **Where:** **Account** at the top of the dashboard (`account.html`)
 
 Change your own password: enter the current one, then the new one twice (min 8 characters). You stay signed in on this device; your other devices are signed out.
 
-### 6.5 First super admin (owner / developer)
+### 6.6 First super admin (owner / developer)
 
 The very first super admin is created in Supabase → **SQL Editor**; after that, use the Staff page.
 
@@ -370,7 +395,19 @@ where username = 'owner';
 - All pages adapt to screen size; the dashboard cards stack on narrow screens.
 - On phones the New bill window opens full-screen with an app-style layout: numbered steps, category chips, item photos, and a cart bar at the bottom. On larger screens it opens as a compact centred window.
 - Dark mode follows the device setting.
-- Tip: add the site to your home screen from the browser menu for quick access at the counter.
+
+**Install it as an app.** The site can be installed like a normal app, so it opens
+full screen with its own icon and no browser bars:
+
+| Device | How |
+|---|---|
+| Android (Chrome) | Tap **⬇ Install app** at the top, or the browser menu → **Install app** |
+| iPhone / iPad (Safari) | **Share** → **Add to Home Screen** |
+| Windows / Mac (Chrome, Edge) | Click **⬇ Install app** at the top, or the install icon in the address bar |
+
+Once installed, pages you have already opened still load without a connection, and
+you get an **No connection** screen instead of a browser error. Live data — bills,
+the kitchen board, the menu — always needs the internet.
 
 ---
 
@@ -387,3 +424,6 @@ where username = 'owner';
 | Page shows errors about the database | Check `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `js/config.js` and that `schema.sql` (or all migrations) was run. |
 | "Too many failed attempts" | Wait the number of minutes shown, or ask a super admin to reset your password on the Staff page. |
 | Shop name / UPI ID not updated on a device | Refresh the page; settings load when a page opens. |
+| No sign-in alerts | Check the bell says **🔔 Sign-in alerts**, that the app is open somewhere, and that the browser is allowed to show notifications for the site. Your own sign-ins are never announced. |
+| Alerts have no sound | Browsers only allow sound after a click. Click the bell once on that device. |
+| App still shows an old version after an update | Close every window of the installed app and reopen it, or hard-refresh in the browser. |

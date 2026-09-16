@@ -87,7 +87,10 @@
       location.replace("dashboard.html");
       return null;
     }
-    return { ...s, ...me };
+    const admin = { ...s, ...me };
+    // Super admins are told when anyone signs in (js/notify.js).
+    if (me.role === "super") window.App.loginAlerts?.start(admin);
+    return admin;
   }
 
   async function logout() {

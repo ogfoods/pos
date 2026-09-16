@@ -4,7 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Modify Menu</title>
-  <link rel="stylesheet" href="css/style.css?v=11" />
+  <meta name="theme-color" content="#d9480f" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="stylesheet" href="css/style.css?v=12" />
 </head>
 <body>
   <header class="topbar">
@@ -86,8 +93,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=11"></script>
-  <script src="js/common.js?v=11"></script>
+  <script src="js/config.js?v=12"></script>
+  <script src="js/common.js?v=12"></script>
+  <script src="js/notify.js?v=12"></script>
   <script>
     const { rpc, money, esc, toast } = App;
     let me, items = [], recipes = {}, ingredients = [], stock = { items: {} };

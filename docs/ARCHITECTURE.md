@@ -48,11 +48,16 @@ POS_Billing/
 ├── account.html        Any admin: change own password
 ├── kitchen.html        Any admin: kitchen display (new / preparing / ready columns, live refresh, chime)
 ├── sales.html          Super admin: sales KPIs, by-day / by-hour bars, methods, top items, staff, shift closes
+├── offline.html        Shown by the service worker when a page is opened with no connection
+├── manifest.webmanifest  PWA manifest: name, icons, colours, standalone display, shortcuts
+├── sw.js               Service worker: offline shell cache, notification clicks
+├── icons/              App icons (192, 512, maskable 512, apple touch, notification badge)
 ├── css/
 │   └── style.css       Shared styles, responsive layout, dark mode
 ├── js/
 │   ├── config.js       Supabase URL + publishable key; fallback shop settings
-│   └── common.js       Shared helpers exposed as window.App
+│   ├── common.js       Shared helpers exposed as window.App
+│   └── notify.js       Service worker registration, install button, super admin sign-in alerts
 ├── supabase/
 │   └── schema.sql      Tables, RLS, functions, grants (run once in SQL Editor)
 └── docs/
@@ -60,7 +65,7 @@ POS_Billing/
     └── USER_GUIDE.md   Features and how to use them
 ```
 
-Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `common.js` → an inline page script.
+Each HTML page loads scripts in this order: `supabase-js` → `config.js` → `common.js` → `notify.js` → an inline page script.
 
 ### `js/common.js` (window.App)
 
@@ -193,6 +198,7 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `admin_login(p_username, p_password)` | Public | Rate-limited (5 failures per username or 20 per IP in 15 min). Returns `{token, username, role, expires_at}` or `{error}` (errors are returned, not raised, so failed attempts are recorded) |
 | `admin_logout(p_token)` | Public | Deletes the session |
 | `admin_me(p_token)` | Any admin | Returns `{username, role}`; used as a page guard |
+| `recent_logins(p_token, p_after_id)` | Super admin | Successful logins newer than `p_after_id` (max 20, last hour only) plus `last_id` and `server_time`. `p_after_id` null = bootstrap: cursor only, no rows |
 | `change_my_password(p_token, p_current, p_new)` | Any admin | Verifies current password, min 8 chars, signs out the user's other sessions; audited |
 | `get_settings()` | Public | Shop settings, including home page fields (`tagline`, `whatsapp`, `maps_url`, `cover_image_url`, `opening_hours`) |
 | `public_kitchen()` | Public | Live board: `queued`, `preparing`, `ready` (id, kitchen status, times, items; max 12 each, last 12h, not cancelled) and `orders_today`, `served_today` (IST). No names, phones, totals or payment data |
@@ -252,6 +258,70 @@ sequenceDiagram
     Note over P,DB: Each protected page calls admin_me(token) on load
 ```
 
+### Sign-in alerts (super admin)
+
+```mermaid
+sequenceDiagram
+    participant A as Any admin
+    participant DB as Supabase
+    participant RT as Realtime topic "admin-logins"
+    participant S as Super admin page
+    A->>DB: rpc admin_login (success)
+    DB->>RT: _login_ping() broadcasts empty "login" event
+    RT-->>S: event
+    S->>DB: rpc recent_logins(token, after_id)
+    DB-->>S: rows (username, role, ip, created_at), last_id
+    S->>S: toast + chime + OS notification, cursor := last_id
+```
+
+The ping carries no data because the topic is public, exactly like `kitchen`.
+Details come from `recent_logins`, which requires a super admin token.
+
+`js/notify.js` runs the listener. `requireAdmin` starts it whenever the signed-in
+user is a super admin, so it works on every admin page, not just the dashboard.
+
+- **Cursor:** `login_attempts.id`, stored in `localStorage` as `pos_login_cursor`.
+  The first poll of a browser only learns the cursor and shows nothing, and the
+  function never returns rows older than an hour, so a stale cursor cannot replay
+  a day of logins as fresh alerts.
+- **Fallback:** a 60-second poll while the tab is visible, plus a poll on
+  `visibilitychange`, covers a missed broadcast.
+- **Own logins are skipped** by username, so a super admin is not alerted about
+  their own sign-in on this device.
+- **Duplicates:** every open tab may alert, but the notification `tag`
+  (`login-<id>`) means the operating system shows one notification per sign-in.
+- **On/off:** the 🔔 button injected into the top bar. The preference lives in
+  `localStorage` (`pos_login_alerts`); the click is also the user gesture that
+  browsers require before asking for notification permission and before audio
+  can play.
+
+## PWA
+
+`manifest.webmanifest` + `sw.js` + `icons/` make the app installable on Android,
+Windows, macOS and iOS. Paths are relative, so this works both at a domain root
+and under a GitHub Pages project path (`/<repo>/`).
+
+`sw.js` caching:
+
+| Request | Strategy |
+|---|---|
+| `*.supabase.co` / `*.supabase.in` (REST, Realtime, Storage) | Never touched — always the network |
+| Navigations (HTML) | Network first, cache fallback, then `offline.html` |
+| CSS, JS, icons, CDN libraries | Cache first, refreshed in the background |
+
+The cache name (`pos-shell-v1`) must be bumped whenever the precached file list
+changes; `activate` deletes every other cache. A waiting worker is told to
+`SKIP_WAITING` as soon as it installs, so a new version takes over on the next load.
+
+The service worker also owns `notificationclick`: it focuses an open app window
+(or opens `dashboard.html`) and navigates to the notification's `data.url`.
+Notifications are shown via `registration.showNotification`, because the
+`Notification` constructor is unavailable on Android Chrome.
+
+An **Install app** button appears in the top bar when the browser fires
+`beforeinstallprompt` (Chrome, Edge, Android). Safari and Firefox never fire it;
+there the user installs from the browser menu.
+
 ### New bill
 
 ```mermaid
@@ -288,7 +358,7 @@ sequenceDiagram
 3. Set values in `js/config.js`.
 4. Push to `main`; GitHub Pages publishes from the repository root.
 
-Cache busting: HTML pages load `css/style.css?v=N`, `js/config.js?v=N` and `js/common.js?v=N`. After changing any CSS/JS file, bump `N` in every HTML page so browsers fetch the new version instead of a cached copy.
+Cache busting: HTML pages load `css/style.css?v=N`, `js/config.js?v=N`, `js/common.js?v=N` and `js/notify.js?v=N`. After changing any CSS/JS file, bump `N` in every HTML page, and bump `CACHE` in `sw.js` so installed copies of the app fetch the new shell instead of serving the cached one.
 
 Schema changes: update `schema.sql` (for fresh installs) and add a numbered file in `supabase/migrations/` for existing databases. Run new migration files in order in the SQL Editor, then commit both.
 
@@ -305,4 +375,5 @@ Schema changes: update `schema.sql` (for fresh installs) and add a numbered file
 
 ## Possible future improvements
 
+- Web Push for sign-in alerts, so a super admin is notified with no page open (service worker `push` handler, VAPID keys, a `push_subscriptions` table and an Edge Function called from the database).
 - OTP verification for customer order lookup.

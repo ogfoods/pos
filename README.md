@@ -19,6 +19,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `settings.html` | Super admin | Shop name, address, phone, UPI ID, currency, receipt footer |
 | `audit.html` | Super admin | Who changed bills, menu, recipes, ingredients, staff, settings |
 | `account.html` | All admins | Change own password |
+| `offline.html` | Everyone | Shown when a page is opened with no connection |
 | `kitchen.html` | All admins | Kitchen display: live queue new → preparing → ready → served, late colours, chime |
 | `sales.html` | Super admin | Sales by day/hour, payment methods, top items, staff, shift closes |
 
@@ -52,10 +53,30 @@ Repo → Settings → Pages → Source: `main` branch, `/ (root)`. Site appears 
 ### Local preview
 Any static server, e.g. `npx serve .` or `python -m http.server 8000`.
 
+## Install as an app
+
+The site is a PWA: `manifest.webmanifest`, `sw.js` and `icons/`. On Chrome, Edge and
+Android an **Install app** button appears in the top bar; on iOS use Safari's
+**Share → Add to Home Screen**. Installed, it opens full screen with its own icon,
+and pages already visited still open without a connection. Live data (bills, the
+kitchen board, the menu) always needs the internet.
+
+## Sign-in alerts
+
+Super admins are notified when anyone signs in. The 🔔 button in the top bar turns
+alerts on and asks for notification permission; after that every sign-in shows a
+toast, a chime and a desktop notification on any device where a super admin has the
+app open. Own sign-ins are skipped.
+
+Requires migration `012_login_alerts.sql`. Notifications only arrive while the app is
+open in a tab or window — push with the app fully closed needs Web Push and is not
+built yet.
+
 ## Security notes
 - All tables have RLS on with no policies; browser talks only to `SECURITY DEFINER` RPC functions.
 - Login returns a 12-hour session token; admin/super checks happen in the database, not just the UI.
 - Login is rate-limited (5 failures per username / 20 per IP in 15 minutes).
 - Super admin changes are recorded in an audit log.
+- Sign-in alerts broadcast an empty Realtime ping; who signed in is fetched with `recent_logins`, which requires a super admin token.
 - Order totals are computed server-side from menu prices.
 - The public phone search shows history to anyone who knows a phone number. Acceptable for simple shops; add OTP verification if that is a concern.
