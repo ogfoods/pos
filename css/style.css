@@ -730,3 +730,8 @@ td.num, th.num { text-align: right; }
 
 /* Checkboxes and radios follow the brand colour. */
 input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
+
+/* A link-styled button with nothing to link to (e.g. WhatsApp with no number). */
+.btn.is-disabled, .btn[aria-disabled="true"] {
+  opacity: .45; cursor: not-allowed; pointer-events: none;
+}

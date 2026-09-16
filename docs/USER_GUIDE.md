@@ -88,14 +88,9 @@ For a normal admin, the super admin cards are greyed out with a 🔒 label, and 
 
 **Where:** Dashboard → **New bill**
 
-The window has three steps. The bar at the top shows which step you are on. Use **Back** to return to an earlier step without losing your entries.
+The window has three steps: items first, then the customer, then payment. The bar at the top shows which step you are on. Use **Back** to return to an earlier step without losing your entries.
 
-### Step 1 — Customer details
-1. Enter the customer's **phone number** (required, exactly 10 digits — letters and symbols are ignored).
-2. Enter the **customer name** (optional). If left blank for a returning customer, their saved name is used.
-3. Click **Next**.
-
-### Step 2 — Select items
+### Step 1 — Select items
 1. Tap a category chip (**All**, Snacks, Beverages, …) to narrow the list, or type in **Filter items…** to search by name or category.
 2. Each item shows its photo (or first letter), name, category and price. Use **+** and **−** to set the quantity. Selected items are highlighted.
 3. The bar at the bottom shows a cart badge with the item count and the running total.
@@ -105,6 +100,13 @@ Stock warnings: a red **⚠** means out of stock and an amber **⚠** means low 
 
 If the list is empty, a super admin needs to add menu items first.
 
+### Step 2 — Customer details
+1. Enter the customer's **phone number**. This is **optional** — leave it blank for a walk-in who does not want to give one. Anything typed must be exactly 10 digits; letters and symbols are ignored.
+2. Enter the **customer name** (optional). If left blank for a returning customer, their saved name is used.
+3. Click **Next**.
+
+Without a number the bill still saves and prints normally, but it will not appear in any customer's order history and the **WhatsApp** button on the saved screen is greyed out, since there is nobody to send it to.
+
 ### Step 3 — Payment
 1. Check the customer, item list and **total amount**.
 2. Pick the payment method: **Cash**, **UPI** or **Card**.
@@ -113,10 +115,10 @@ If the list is empty, a super admin needs to add menu items first.
 3. The saved screen shows the order number and status:
    - For UPI, keep the QR on screen. When the payment shows in your UPI app, click **✓ Payment received** to mark it **paid**.
    - **🖨️ Print receipt** prints a 58 mm receipt.
-   - **WhatsApp** opens WhatsApp with the bill summary addressed to the customer's number.
+   - **WhatsApp** opens WhatsApp with the bill summary addressed to the customer's number. Greyed out when the bill has no number.
 4. Click **New bill** for the next customer, or close the window.
 
-The order is saved under the customer's phone number and appears in their history immediately.
+An order with a phone number is saved under it and appears in that customer's history immediately.
 
 ### Awaiting payment
 UPI bills not yet confirmed appear under **Awaiting payment** on the dashboard (refreshes every minute). Click **✓ Received** once the money arrives, or **Receipt** to print. Any admin can confirm payments.

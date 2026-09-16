@@ -188,6 +188,24 @@
     setTimeout(() => t.remove(), 3500);
   }
 
+  // Points a link at the WhatsApp receipt, or greys it out when the order has
+  // no phone number (bills for walk-ins can be saved without one).
+  function setWhatsapp(el, order) {
+    if (!el) return;
+    const has = digits(order && order.phone).length >= 10;
+    if (has) {
+      el.href = whatsappUrl(order);
+      el.removeAttribute("aria-disabled");
+      el.removeAttribute("title");
+      el.classList.remove("is-disabled");
+    } else {
+      el.removeAttribute("href");
+      el.setAttribute("aria-disabled", "true");
+      el.title = "No phone number on this bill.";
+      el.classList.add("is-disabled");
+    }
+  }
+
   function renderItems(items) {
     return (items || [])
       .map((i) => `<li><span>${esc(i.name)} × ${i.qty}</span><span>${money(i.price * i.qty)}</span></li>`)
@@ -310,7 +328,7 @@
 
   window.App = {
     cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems, flash,
-    methodLabel, renderQR, printReceipt, whatsappUrl, applySettings, upiConfigured,
+    methodLabel, renderQR, printReceipt, whatsappUrl, setWhatsapp, applySettings, upiConfigured,
     printHtml, printShiftReport, cashDiff, settingsReady,
   };
 })();

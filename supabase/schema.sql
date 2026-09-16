@@ -62,7 +62,8 @@ create table if not exists public.customers (
 
 create table if not exists public.orders (
   id             bigint generated always as identity primary key,
-  phone          text not null references public.customers(phone) on update cascade,
+  -- Optional: walk-in customers can be billed without a number.
+  phone          text references public.customers(phone) on update cascade,
   customer_name  text,
   total          numeric(10,2) not null default 0,
   payment_status text not null default 'paid' check (payment_status in ('paid', 'pending', 'cancelled')),
@@ -89,6 +90,7 @@ create index if not exists order_items_order_idx on public.order_items(order_id)
 alter table public.menu_items add column if not exists image_url text;
 alter table public.orders add column if not exists payment_method text;
 alter table public.orders add column if not exists paid_at timestamptz;
+alter table public.orders alter column phone drop not null;
 
 do $$
 begin
@@ -836,7 +838,7 @@ language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   a        public.admins;
-  v_phone  text := regexp_replace(coalesce(p_phone, ''), '\D', '', 'g');
+  v_phone  text := nullif(regexp_replace(coalesce(p_phone, ''), '\D', '', 'g'), '');
   v_name   text := nullif(trim(p_customer_name), '');
   v_method text := lower(trim(coalesce(p_payment_method, 'cash')));
   v_order  public.orders;
@@ -845,8 +847,9 @@ declare
 begin
   a := public._require_admin(p_token);
 
-  if v_phone !~ '^[0-9]{10}$' then
-    raise exception 'Enter a valid 10-digit phone number.';
+  -- Optional, but a number that is given has to be a real one.
+  if v_phone is not null and v_phone !~ '^[0-9]{10}$' then
+    raise exception 'Enter a valid 10-digit phone number, or leave it blank.';
   end if;
   if v_method not in ('cash', 'upi', 'card') then
     raise exception 'Choose a valid payment method.';
@@ -855,11 +858,14 @@ begin
     raise exception 'Add at least one item.';
   end if;
 
-  insert into public.customers(phone, name) values (v_phone, v_name)
-  on conflict (phone) do update set name = coalesce(excluded.name, public.customers.name);
+  if v_phone is not null then
+    insert into public.customers(phone, name) values (v_phone, v_name)
+    on conflict (phone) do update set name = coalesce(excluded.name, public.customers.name);
+  end if;
 
   insert into public.orders(phone, customer_name, created_by, payment_method, payment_status, paid_at)
-  values (v_phone, coalesce(v_name, (select name from public.customers where phone = v_phone)), a.id,
+  values (v_phone,
+          coalesce(v_name, (select name from public.customers where phone = v_phone)), a.id,
           v_method,
           case when v_method = 'upi' then 'pending' else 'paid' end,
           case when v_method = 'upi' then null else now() end)

@@ -227,7 +227,7 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `sales_report(p_token, p_from, p_to)` | Super admin | IST range (max 1 year): `summary` (paid orders, sales, avg), `pending`, `cancelled`, `by_method`, `by_day` (every day filled), `by_hour` (0–23), `top_items` (top 10 by revenue), `by_staff` |
 | `get_orders_by_phone(p_phone)` | Public | Customer order history with items, newest first |
 | `list_menu(p_token, p_include_inactive)` | Any admin (active items); super admin (with hidden items) | Menu sorted by category and name |
-| `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method)` | Any admin | Upserts the customer, creates the order and items, computes the total. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
+| `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method)` | Any admin | Phone is optional (blank → `orders.phone` null, no customer row); a number that is given must be 10 digits. Upserts the customer, creates the order and items, computes the total. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
 | `mark_order_paid(p_token, p_id, p_method?)` | Any admin | `pending` → `paid`, sets `paid_at`; no-op if already paid |
 | `list_pending_orders(p_token)` | Any admin | Orders awaiting payment, newest first (max 50) |
 | `get_order(p_token, p_id)` | Any admin | One order with items, method, status, creator |
@@ -392,14 +392,14 @@ sequenceDiagram
     participant A as Admin
     participant M as New bill modal
     participant DB as Supabase
-    A->>M: Step 1: phone (+ optional name) → Next
     M->>DB: rpc list_menu (active items)
     DB-->>M: menu items
-    A->>M: Step 2: choose items and quantities → Next
+    A->>M: Step 1: choose items and quantities → Next
+    A->>M: Step 2: phone and name, both optional → Next
     M->>M: Step 3: show total and UPI QR
     A->>M: Done
     M->>DB: rpc create_order(token, phone, name, [{menu_item_id, qty}])
-    DB->>DB: upsert customer, insert order + items, total = Σ price×qty
+    DB->>DB: upsert customer (only with a phone), insert order + items, total = Σ price×qty
     DB-->>M: order id, total
     M-->>A: toast "Order #id saved"
 ```

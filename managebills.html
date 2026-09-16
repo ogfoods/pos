@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=18" />
+  <link rel="stylesheet" href="css/style.css?v=19" />
 </head>
 <body>
   <header class="topbar">
@@ -60,10 +60,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=18"></script>
-  <script src="js/common.js?v=18"></script>
-  <script src="js/notify.js?v=18"></script>
-  <script src="js/shell.js?v=18"></script>
+  <script src="js/config.js?v=19"></script>
+  <script src="js/common.js?v=19"></script>
+  <script src="js/notify.js?v=19"></script>
+  <script src="js/shell.js?v=19"></script>
   <script>
     const { rpc, money, fmtDate, esc, toast, renderItems, methodLabel } = App;
     const PAGE = 25;
@@ -120,7 +120,7 @@
           return `<tr>
             <td>${o.id}</td>
             <td>${fmtDate(o.created_at)}</td>
-            <td>${esc(o.customer_name || "—")}<div class="muted">${esc(o.phone)}</div></td>
+            <td>${esc(o.customer_name || "—")}<div class="muted">${o.phone ? esc(o.phone) : "no number"}</div></td>
             <td>${qty}</td>
             <td class="num">${money(o.total)}</td>
             <td>${methodLabel(o.payment_method)}</td>
@@ -177,12 +177,12 @@
       current = o;
       document.getElementById("d-title").textContent = `Order #${o.id}`;
       document.getElementById("d-body").innerHTML = `
-        <p><strong>${esc(o.customer_name || "Customer")}</strong> · ${esc(o.phone)}<br>
+        <p><strong>${esc(o.customer_name || "Customer")}</strong>${o.phone ? " · " + esc(o.phone) : ""}<br>
         <span class="muted">${fmtDate(o.created_at)} · by ${esc(o.created_by || "—")}</span><br>
         <span class="muted">${methodLabel(o.payment_method)} ·</span> <span class="badge badge-${esc(o.payment_status)}">${esc(o.payment_status)}</span></p>
         <ul class="order-items">${renderItems(o.items)}</ul>
         <div class="order-total"><span>Total</span><span>${money(o.total)}</span></div>`;
-      document.getElementById("d-wa").href = App.whatsappUrl(o);
+      App.setWhatsapp(document.getElementById("d-wa"), o);
       document.getElementById("detail").classList.remove("hidden");
     }
     function closeDetail() { document.getElementById("detail").classList.add("hidden"); }
