@@ -6,7 +6,7 @@
  * Bump CACHE whenever the precached files change; the old cache is deleted on
  * activate and every client gets the new shell on its next load.
  */
-const CACHE = "pos-shell-v9";
+const CACHE = "pos-shell-v10";
 
 // Relative to the service worker scope.
 const SHELL = [
@@ -25,6 +25,7 @@ const SHELL = [
   "account.html",
   "kitchen.html",
   "sales.html",
+  "coupons.html",
   "offline.html",
   "css/style.css",
   "js/config.js",

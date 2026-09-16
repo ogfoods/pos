@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+  <title>Coupons</title>
+  <meta name="theme-color" content="#d9480f" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="stylesheet" href="css/style.css?v=21" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="dashboard.html"><span class="brand-dot"></span><span data-shop-name>Shop</span></a>
+    <div class="topbar-right">
+      <a class="btn btn-ghost btn-sm" href="dashboard.html">← Dashboard</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Coupons</h1>
+    <p class="muted">Cashiers enter a code at the payment step of a new bill. One coupon per bill.</p>
+
+    <form class="card" id="c-form" style="margin:1rem 0 1.5rem" novalidate>
+      <h3 id="form-title">New coupon</h3>
+      <input type="hidden" id="c-id" />
+      <div class="form-grid-2">
+        <div class="field">
+          <label for="c-code">Code</label>
+          <input class="input coupon-code" id="c-code" maxlength="20" required autocomplete="off" autocapitalize="characters"
+            spellcheck="false" placeholder="e.g. WELCOME10" style="text-transform:uppercase" />
+        </div>
+        <div class="field">
+          <label for="c-desc">Description <span class="hint">(optional, shown to the cashier)</span></label>
+          <input class="input" id="c-desc" maxlength="120" placeholder="e.g. 10% off for first visit" />
+        </div>
+
+        <div class="field">
+          <label for="c-kind">Type</label>
+          <select class="input" id="c-kind">
+            <option value="percent">Percentage off</option>
+            <option value="flat">Flat amount off</option>
+            <option value="bogo">Buy X, get Y free</option>
+          </select>
+        </div>
+        <div class="field" data-for="percent flat">
+          <label for="c-value" id="c-value-label">Percent off</label>
+          <input class="input" id="c-value" type="number" min="0" step="0.01" inputmode="decimal" />
+        </div>
+        <div class="field" data-for="bogo">
+          <label for="c-buy">Buy</label>
+          <input class="input" id="c-buy" type="number" min="1" step="1" inputmode="numeric" value="1" />
+        </div>
+        <div class="field" data-for="bogo">
+          <label for="c-get">Get free</label>
+          <input class="input" id="c-get" type="number" min="1" step="1" inputmode="numeric" value="1" />
+          <span class="hint">The cheapest eligible items are the free ones.</span>
+        </div>
+        <div class="field" data-for="percent bogo">
+          <label for="c-max">Maximum discount <span class="hint">(optional)</span></label>
+          <input class="input" id="c-max" type="number" min="0" step="0.01" inputmode="decimal" placeholder="No cap" />
+        </div>
+        <div class="field">
+          <label for="c-min">Minimum bill <span class="hint">(before discount)</span></label>
+          <input class="input" id="c-min" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" />
+        </div>
+
+        <div class="field">
+          <label for="c-from">Valid from <span class="hint">(optional)</span></label>
+          <input class="input" id="c-from" type="date" />
+        </div>
+        <div class="field">
+          <label for="c-to">Valid until <span class="hint">(optional, inclusive)</span></label>
+          <input class="input" id="c-to" type="date" />
+        </div>
+
+        <div class="field">
+          <label for="c-uses">Total uses <span class="hint">(optional)</span></label>
+          <input class="input" id="c-uses" type="number" min="1" step="1" inputmode="numeric" placeholder="Unlimited" />
+        </div>
+        <div class="field">
+          <label for="c-per">Uses per customer <span class="hint">(optional)</span></label>
+          <input class="input" id="c-per" type="number" min="1" step="1" inputmode="numeric" placeholder="Unlimited" />
+          <span class="hint">When set, the bill needs the customer's phone number.</span>
+        </div>
+
+        <div class="field span-all">
+          <label>Applies to</label>
+          <div class="seg-inline" role="radiogroup">
+            <label><input type="radio" name="c-scope" value="all" checked /> Whole bill</label>
+            <label><input type="radio" name="c-scope" value="items" /> Selected items or categories</label>
+          </div>
+          <div id="c-picker" class="hidden">
+            <div class="pick-box">
+              <h4>Categories</h4>
+              <div class="pick-grid" id="c-cats"></div>
+            </div>
+            <div class="pick-box">
+              <h4>Items</h4>
+              <input class="input" id="c-item-filter" type="search" placeholder="Filter items…" aria-label="Filter items" />
+              <div class="pick-grid" id="c-items"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field check-field span-all">
+          <label><input type="checkbox" id="c-active" checked /> Active</label>
+        </div>
+        <div class="form-actions span-all">
+          <button class="btn" type="submit" id="save-btn">Create coupon</button>
+          <button class="btn btn-ghost hidden" type="button" id="cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="toolbar">
+      <input class="input" id="filter" type="search" placeholder="Filter coupons…" aria-label="Filter coupons" />
+      <span class="muted" id="count"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Offer</th><th>Applies to</th><th>Valid</th><th class="num">Used</th><th class="num">Given</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=21"></script>
+  <script src="js/common.js?v=21"></script>
+  <script src="js/notify.js?v=21"></script>
+  <script src="js/shell.js?v=21"></script>
+  <script>
+    const { rpc, money, esc, toast } = App;
+    const $ = (id) => document.getElementById(id);
+    let me, coupons = [], menu = [];
+    const picked = { items: new Set(), cats: new Set() };
+
+    (async () => {
+      try {
+        me = await App.requireAdmin({ superOnly: true });
+        if (me) load();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    })();
+
+    async function load() {
+      try {
+        [coupons, menu] = await Promise.all([
+          rpc("list_coupons", { p_token: me.token }),
+          rpc("list_menu", { p_token: me.token, p_include_inactive: true }),
+        ]);
+        render();
+        renderPicker();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    }
+
+    // ---------- List ----------
+    const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const fmtDay = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+    function offer(c) {
+      let s =
+        c.kind === "percent" ? `${Number(c.value)}% off`
+        : c.kind === "flat" ? `${money(c.value)} off`
+        : `Buy ${c.buy_qty} get ${c.get_qty} free`;
+      if (c.max_discount != null) s += ` · up to ${money(c.max_discount)}`;
+      if (Number(c.min_bill) > 0) s += ` · min bill ${money(c.min_bill)}`;
+      return s;
+    }
+
+    function scope(c) {
+      if (c.applies_to === "all") return "Whole bill";
+      const names = [
+        ...(c.categories || []).map((x) => `${x} (category)`),
+        ...(c.item_ids || []).map((id) => (menu.find((m) => m.id === id) || {}).name || `#${id} (deleted)`),
+      ];
+      const shown = names.slice(0, 3).join(", ");
+      return names.length > 3 ? `${shown} +${names.length - 3} more` : shown;
+    }
+
+    function validity(c) {
+      if (!c.valid_from && !c.valid_to) return "Always";
+      if (!c.valid_from) return `Until ${fmtDay(c.valid_to)}`;
+      if (!c.valid_to) return `From ${fmtDay(c.valid_from)}`;
+      return `${fmtDay(c.valid_from)} – ${fmtDay(c.valid_to)}`;
+    }
+
+    function status(c) {
+      const t = todayIST();
+      if (!c.is_active) return ["off", ""];
+      if (c.valid_to && t > c.valid_to) return ["expired", "badge-cancelled"];
+      if (c.usage_limit != null && c.uses >= c.usage_limit) return ["used up", "badge-cancelled"];
+      if (c.valid_from && t < c.valid_from) return ["scheduled", "badge-pending"];
+      return ["active", "badge-paid"];
+    }
+
+    $("filter").addEventListener("input", render);
+
+    function render() {
+      const q = $("filter").value.trim().toLowerCase();
+      const list = coupons.filter(
+        (c) => !q || c.code.toLowerCase().includes(q) || (c.description || "").toLowerCase().includes(q)
+      );
+      $("count").textContent = plural(coupons.length, "coupon");
+      $("rows").innerHTML = list.length
+        ? list
+            .map((c) => {
+              const [label, cls] = status(c);
+              return `<tr>
+                <td><span class="coupon-code">${esc(c.code)}</span>${c.description ? `<div class="sub">${esc(c.description)}</div>` : ""}</td>
+                <td class="wrap">${esc(offer(c))}${c.per_customer_limit ? `<div class="sub">${plural(c.per_customer_limit, "use")} per customer · needs phone</div>` : ""}</td>
+                <td class="wrap">${esc(scope(c))}</td>
+                <td>${esc(validity(c))}</td>
+                <td class="num">${c.uses}${c.usage_limit != null ? ` / ${c.usage_limit}` : ""}</td>
+                <td class="num">${money(c.discount_given)}</td>
+                <td><span class="badge ${cls}">${label}</span></td>
+                <td><div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" data-edit="${c.id}">Edit</button>
+                  <button class="btn btn-ghost btn-sm" data-toggle="${c.id}">${c.is_active ? "Switch off" : "Switch on"}</button>
+                  <button class="btn btn-danger btn-sm" data-del="${c.id}">Delete</button>
+                </div></td>
+              </tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="8" class="empty">${coupons.length ? "No matching coupons." : "No coupons yet. Create your first one above."}</td></tr>`;
+    }
+
+    // ---------- Form ----------
+    const scopeValue = () => document.querySelector('input[name="c-scope"]:checked').value;
+
+    function syncKind() {
+      const k = $("c-kind").value;
+      document.querySelectorAll("[data-for]").forEach((f) => f.classList.toggle("hidden", !f.dataset.for.split(" ").includes(k)));
+      $("c-value-label").textContent = k === "percent" ? "Percent off" : "Amount off";
+      $("c-value").max = k === "percent" ? "100" : "";
+    }
+    $("c-kind").addEventListener("change", syncKind);
+
+    function syncScope() {
+      $("c-picker").classList.toggle("hidden", scopeValue() !== "items");
+    }
+    document.querySelectorAll('input[name="c-scope"]').forEach((r) => r.addEventListener("change", syncScope));
+
+    function renderPicker() {
+      const cats = [...new Set(menu.map((m) => m.category))].sort();
+      // Keep categories picked earlier even if no item uses them any more.
+      picked.cats.forEach((c) => cats.includes(c) || cats.push(c));
+      $("c-cats").innerHTML = cats.length
+        ? cats
+            .map((c) => `<label><input type="checkbox" data-cat="${esc(c)}" ${picked.cats.has(c) ? "checked" : ""} /> ${esc(c)}</label>`)
+            .join("")
+        : `<span class="muted">No categories yet.</span>`;
+      renderItemPicker();
+    }
+
+    function renderItemPicker() {
+      const q = $("c-item-filter").value.trim().toLowerCase();
+      const list = menu.filter((m) => !q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
+      $("c-items").innerHTML = list.length
+        ? list
+            .map(
+              (m) => `<label><input type="checkbox" data-item="${m.id}" ${picked.items.has(m.id) ? "checked" : ""} />
+                <span>${esc(m.name)} <span class="muted">${money(m.price)}${m.is_active ? "" : " · hidden"}</span></span></label>`
+            )
+            .join("")
+        : `<span class="muted">${menu.length ? "No matching items." : "No menu items yet."}</span>`;
+    }
+    $("c-item-filter").addEventListener("input", renderItemPicker);
+
+    $("c-picker").addEventListener("change", (e) => {
+      const t = e.target;
+      if (t.dataset.cat != null) t.checked ? picked.cats.add(t.dataset.cat) : picked.cats.delete(t.dataset.cat);
+      if (t.dataset.item != null) {
+        const id = Number(t.dataset.item);
+        t.checked ? picked.items.add(id) : picked.items.delete(id);
+      }
+    });
+
+    function resetForm() {
+      $("c-form").reset();
+      $("c-id").value = "";
+      $("c-active").checked = true;
+      picked.items.clear();
+      picked.cats.clear();
+      $("form-title").textContent = "New coupon";
+      $("save-btn").textContent = "Create coupon";
+      $("cancel-btn").classList.add("hidden");
+      syncKind();
+      syncScope();
+      renderPicker();
+    }
+    $("cancel-btn").addEventListener("click", resetForm);
+
+    function fillForm(c) {
+      $("c-id").value = c.id;
+      $("c-code").value = c.code;
+      $("c-desc").value = c.description || "";
+      $("c-kind").value = c.kind;
+      $("c-value").value = c.kind === "bogo" ? "" : Number(c.value);
+      $("c-buy").value = c.buy_qty ?? 1;
+      $("c-get").value = c.get_qty ?? 1;
+      $("c-max").value = c.max_discount ?? "";
+      $("c-min").value = Number(c.min_bill) ? Number(c.min_bill) : "";
+      $("c-from").value = c.valid_from || "";
+      $("c-to").value = c.valid_to || "";
+      $("c-uses").value = c.usage_limit ?? "";
+      $("c-per").value = c.per_customer_limit ?? "";
+      $("c-active").checked = c.is_active;
+      document.querySelector(`input[name="c-scope"][value="${c.applies_to}"]`).checked = true;
+      picked.items = new Set(c.item_ids || []);
+      picked.cats = new Set(c.categories || []);
+      $("form-title").textContent = `Edit ${c.code}`;
+      $("save-btn").textContent = "Save";
+      $("cancel-btn").classList.remove("hidden");
+      $("c-item-filter").value = "";
+      syncKind();
+      syncScope();
+      renderPicker();
+    }
+
+    const num = (id) => ($(id).value.trim() === "" ? null : Number($(id).value));
+
+    // Same shape as upsert_coupon expects; also used by Switch on/off.
+    const payload = (c) => ({
+      code: c.code, description: c.description, kind: c.kind, value: c.value, max_discount: c.max_discount,
+      min_bill: c.min_bill, buy_qty: c.buy_qty, get_qty: c.get_qty, applies_to: c.applies_to,
+      item_ids: c.item_ids, categories: c.categories, valid_from: c.valid_from, valid_to: c.valid_to,
+      usage_limit: c.usage_limit, per_customer_limit: c.per_customer_limit, is_active: c.is_active,
+    });
+
+    function readForm() {
+      const kind = $("c-kind").value;
+      const code = $("c-code").value.trim().toUpperCase();
+      const value = num("c-value");
+      if (!/^[A-Z0-9_-]{3,20}$/.test(code)) return fail("c-code", "Code must be 3 to 20 letters, numbers, - or _.");
+      if (kind === "percent" && !(value > 0 && value <= 100)) return fail("c-value", "Percentage must be more than 0 and at most 100.");
+      if (kind === "flat" && !(value > 0)) return fail("c-value", "Discount amount must be more than 0.");
+      if (kind === "bogo" && !(num("c-buy") >= 1 && num("c-get") >= 1)) return fail("c-buy", "Buy and free quantities must both be at least 1.");
+      const from = $("c-from").value || null;
+      const to = $("c-to").value || null;
+      if (from && to && to < from) return fail("c-to", "Valid until must be on or after valid from.");
+      const scope = scopeValue();
+      if (scope === "items" && !picked.items.size && !picked.cats.size) {
+        return fail("c-item-filter", "Pick at least one item or category for this coupon.");
+      }
+      return {
+        code,
+        description: $("c-desc").value.trim() || null,
+        kind,
+        value: kind === "bogo" ? 0 : value,
+        max_discount: kind === "flat" ? null : num("c-max"),
+        min_bill: num("c-min") || 0,
+        buy_qty: kind === "bogo" ? num("c-buy") : null,
+        get_qty: kind === "bogo" ? num("c-get") : null,
+        applies_to: scope,
+        item_ids: scope === "items" ? [...picked.items] : [],
+        categories: scope === "items" ? [...picked.cats] : [],
+        valid_from: from,
+        valid_to: to,
+        usage_limit: num("c-uses"),
+        per_customer_limit: num("c-per"),
+        is_active: $("c-active").checked,
+      };
+    }
+
+    function fail(id, msg) {
+      toast(msg, "error");
+      $(id).focus();
+      return null;
+    }
+
+    $("c-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = readForm();
+      if (!data) return;
+      const btn = $("save-btn");
+      btn.disabled = true;
+      try {
+        const id = $("c-id").value ? Number($("c-id").value) : null;
+        await rpc("upsert_coupon", { p_token: me.token, p_id: id, p_coupon: data });
+        toast(id ? `${data.code} saved` : `${data.code} created`, "success");
+        resetForm();
+        load();
+      } catch (err) {
+        toast(err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("rows").addEventListener("click", async (e) => {
+      const edit = e.target.closest("[data-edit]");
+      const toggle = e.target.closest("[data-toggle]");
+      const del = e.target.closest("[data-del]");
+      const find = (b, key) => coupons.find((c) => c.id === Number(b.dataset[key]));
+
+      if (edit) {
+        fillForm(find(edit, "edit"));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        $("c-code").focus({ preventScroll: true });
+      } else if (toggle) {
+        const c = find(toggle, "toggle");
+        toggle.disabled = true;
+        try {
+          await rpc("upsert_coupon", { p_token: me.token, p_id: c.id, p_coupon: { ...payload(c), is_active: !c.is_active } });
+          toast(`${c.code} switched ${c.is_active ? "off" : "on"}`, "success");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+          toggle.disabled = false;
+        }
+      } else if (del) {
+        const c = find(del, "del");
+        if (!(await App.confirm({
+          title: `Delete ${c.code}?`,
+          message: c.uses
+            ? `It has been used on ${plural(c.uses, "bill")}. Those bills keep the code and discount.\nTo stop it for now, switch it off instead.`
+            : "To stop it for now, switch it off instead.",
+          okText: "Delete",
+          danger: true,
+        }))) return;
+        try {
+          await rpc("delete_coupon", { p_token: me.token, p_id: c.id });
+          toast(`${c.code} deleted`, "success");
+          if (Number($("c-id").value) === c.id) resetForm();
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+    });
+
+    syncKind();
+    syncScope();
+  </script>
+</body>
+</html>

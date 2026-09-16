@@ -47,6 +47,7 @@ POS_Billing/
 ├── audit.html          Super admin: audit log with area filter and search
 ├── account.html        Any admin: change own password
 ├── kitchen.html        Any admin: kitchen display (new / preparing / ready columns, live refresh, chime)
+├── coupons.html        Super admin: create / edit / switch off coupons, usage and discount given
 ├── sales.html          Super admin: sales KPIs, by-day / by-hour bars, methods, top items, staff, shift closes
 ├── pending.html        Holding page for an admin whose sign-in is waiting for a super admin
 ├── offline.html        Shown by the service worker when a page is opened with no connection
@@ -158,6 +159,8 @@ Other tables (not all columns shown above):
 - `shifts(admin_id, opened_at, opening_cash, closed_at, closed_by, counted_cash, expected_cash, difference, totals jsonb, note)` — one open shift per admin (partial unique index). Expected cash = opening + that admin's paid cash bills created during the shift; `totals` (cash/upi/card/sales/pending/cancelled) is frozen at close.
 - `ingredients` also has `track_stock`, `stock`, `low_stock_at`; `settings.hide_out_of_stock` (default true).
 - `stock_movements(ingredient_id, kind purchase|waste|adjust|sale|sale_reversal, qty signed, balance_after, order_id, admin_id, note)` — every stock change.
+- `coupons(code unique case-insensitive, description, kind percent|flat|bogo, value, max_discount, min_bill, buy_qty, get_qty, applies_to all|items, item_ids[], categories[], valid_from, valid_to (IST dates), usage_limit, per_customer_limit, is_active)`.
+- `orders` also has `subtotal` (before discount), `discount`, `coupon_id` (set null if the coupon is deleted) and `coupon_code` (snapshot). `total` is always the amount charged, so every report uses the discounted figure.
 - `login_attempts(username, ip, succeeded, created_at)` — rate-limit window, purged after a day.
 - `ingredients(id, name unique case-insensitive, unit in g|kg|ml|l|pcs)`
 - `menu_item_ingredients(menu_item_id, ingredient_id, qty)` — quantity per **one** unit of the menu item; PK on both IDs.
@@ -189,7 +192,7 @@ The Supabase publishable (anon) key is public by design — it is in `config.js`
 5. **Audit trail.** Every super admin change (and payment confirmations) writes to `audit_log` inside the same transaction as the change. The log has no update/delete RPC.
 6. **Session tokens.** `admin_login` returns a random UUID token valid for 12 hours, stored in `admin_sessions`. Every admin function receives `p_token` and calls `_require_admin(token, super_required)`.
 7. **Roles enforced server-side.** Hiding cards in the UI is cosmetic; super-only functions raise `Super admin access required.` for a normal admin even if called directly.
-8. **Server-side totals.** `create_order` receives only menu item IDs and quantities. Prices come from `menu_items`, and only active items are accepted.
+8. **Server-side totals.** `create_order` receives only menu item IDs, quantities and an optional coupon code. Prices come from `menu_items`, only active items are accepted, and the discount is recomputed from the `coupons` row; the amount shown by `check_coupon` is only a preview.
 9. **XSS protection.** All user-supplied text is passed through `App.esc()` before being inserted into HTML.
 
 Public home page data: `public_kitchen()` and `public_menu()` are callable without login. They are read-only and return only order numbers, item names/quantities per ticket and kitchen status, plus the menu. Visitors can infer roughly how busy the shop is.
@@ -230,7 +233,11 @@ Known trade-off: `get_orders_by_phone` is public, so anyone who knows a phone nu
 | `sales_report(p_token, p_from, p_to)` | Super admin | IST range (max 1 year): `summary` (paid orders, sales, avg), `pending`, `cancelled`, `by_method`, `by_day` (every day filled), `by_hour` (0–23), `top_items` (top 10 by revenue), `by_staff` |
 | `get_orders_by_phone(p_phone)` | Public | Customer order history with items, newest first |
 | `list_menu(p_token, p_include_inactive)` | Any admin (active items); super admin (with hidden items) | Menu sorted by category and name |
-| `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method)` | Any admin | Phone is optional (blank → `orders.phone` null, no customer row); a number that is given must be 10 digits. Upserts the customer, creates the order and items, computes the total. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
+| `create_order(p_token, p_phone, p_customer_name, p_items, p_payment_method, p_coupon_code?)` | Any admin | Phone is optional (blank → `orders.phone` null, no customer row); a number that is given must be 10 digits. Upserts the customer, creates the order and items, computes the total. With a coupon code, re-checks it via `_coupon_quote` with the coupon row locked (so usage limits hold) and stores subtotal/discount/code; any coupon error rolls the bill back. `cash`/`card` → `paid`; `upi` → `pending`. Returns the full order (receipt shape) |
+| `check_coupon(p_token, p_code, p_phone, p_items)` | Any admin | Preview for the payment step: `{coupon_id, code, description, kind, subtotal, discount, total}`, or raises a readable reason (does not exist, switched off, not started / expired, below minimum bill, covers no item, used up, needs phone, customer already used it) |
+| `list_coupons(p_token)` | Super admin | All coupons with `uses` and `discount_given` (non-cancelled bills) |
+| `upsert_coupon(p_token, p_id, p_coupon jsonb)` | Super admin | Create (`p_id` null) or update; validates and normalises; audited `coupon.create` / `coupon.update` |
+| `delete_coupon(p_token, p_id)` | Super admin | Deletes; bills keep `coupon_code`; audited `coupon.delete` |
 | `mark_order_paid(p_token, p_id, p_method?)` | Any admin | `pending` → `paid`, sets `paid_at`; no-op if already paid |
 | `list_pending_orders(p_token)` | Any admin | Orders awaiting payment, newest first (max 50) |
 | `get_order(p_token, p_id)` | Any admin | One order with items, method, status, creator |

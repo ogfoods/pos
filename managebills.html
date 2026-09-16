@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=20" />
+  <link rel="stylesheet" href="css/style.css?v=21" />
 </head>
 <body>
   <header class="topbar">
@@ -60,10 +60,10 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=20"></script>
-  <script src="js/common.js?v=20"></script>
-  <script src="js/notify.js?v=20"></script>
-  <script src="js/shell.js?v=20"></script>
+  <script src="js/config.js?v=21"></script>
+  <script src="js/common.js?v=21"></script>
+  <script src="js/notify.js?v=21"></script>
+  <script src="js/shell.js?v=21"></script>
   <script>
     const { rpc, money, fmtDate, esc, toast, renderItems, methodLabel } = App;
     const PAGE = 25;
@@ -122,7 +122,7 @@
             <td>${fmtDate(o.created_at)}</td>
             <td>${esc(o.customer_name || "—")}<div class="muted">${o.phone ? esc(o.phone) : "no number"}</div></td>
             <td>${qty}</td>
-            <td class="num">${money(o.total)}</td>
+            <td class="num">${money(o.total)}${App.hasDiscount(o) ? `<div class="muted">${esc(o.coupon_code || "coupon")} −${money(o.discount)}</div>` : ""}</td>
             <td>${methodLabel(o.payment_method)}</td>
             <td>
               <select class="input btn-sm" data-status="${o.id}" style="width:auto">
@@ -185,7 +185,12 @@
         <p><strong>${esc(o.customer_name || "Customer")}</strong>${o.phone ? " · " + esc(o.phone) : ""}<br>
         <span class="muted">${fmtDate(o.created_at)} · by ${esc(o.created_by || "—")}</span><br>
         <span class="muted">${methodLabel(o.payment_method)} ·</span> <span class="badge badge-${esc(o.payment_status)}">${esc(o.payment_status)}</span></p>
-        <ul class="order-items">${renderItems(o.items)}</ul>
+        <ul class="order-items">${renderItems(o.items)}${
+          App.hasDiscount(o)
+            ? `<li><span>Subtotal</span><span>${money(o.subtotal)}</span></li>
+               <li class="discount-line"><span>Coupon ${esc(o.coupon_code || "")}</span><span>−${money(o.discount)}</span></li>`
+            : ""
+        }</ul>
         <div class="order-total"><span>Total</span><span>${money(o.total)}</span></div>`;
       App.setWhatsapp(document.getElementById("d-wa"), o);
       document.getElementById("detail").classList.remove("hidden");

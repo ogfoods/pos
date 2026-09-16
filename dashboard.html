@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=20" />
+  <link rel="stylesheet" href="css/style.css?v=21" />
 </head>
 <body>
   <header class="topbar">
@@ -74,6 +74,14 @@
         <div>
           <h2>Sales</h2>
           <p class="muted">Revenue, busy hours, top items, payment methods, shift closes.</p>
+        </div>
+      </a>
+      <a class="bento-card super-only" href="coupons.html">
+        <span class="badge lock-tag hidden">🔒 Super admin</span>
+        <div class="bento-icon">🏷️</div>
+        <div>
+          <h2>Coupons</h2>
+          <p class="muted">Create discount codes, set validity and limits.</p>
         </div>
       </a>
       <a class="bento-card super-only" href="usage.html">
@@ -218,6 +226,21 @@
           <h3 class="step-title">Payment</h3>
           <p class="muted" id="pay-for"></p>
           <div class="pay-amount" id="pay-amount"></div>
+          <div class="pay-was hidden" id="pay-was"></div>
+          <!-- Optional coupon. The discount comes from the server (check_coupon)
+               and is checked again when the bill is saved. -->
+          <form class="coupon-box" id="coupon-form" novalidate>
+            <div class="coupon-row" id="coupon-entry">
+              <input class="input" id="coupon-code" maxlength="20" autocomplete="off" autocapitalize="characters"
+                spellcheck="false" enterkeyhint="done" placeholder="Coupon code (optional)" aria-label="Coupon code" />
+              <button class="btn btn-ghost" type="submit" id="coupon-apply">Apply</button>
+            </div>
+            <div class="coupon-applied hidden" id="coupon-applied">
+              <span class="grow">🏷️ <strong id="coupon-name"></strong> applied<span class="coupon-desc" id="coupon-desc"></span></span>
+              <button class="btn btn-ghost btn-sm" type="button" id="coupon-remove">Remove</button>
+            </div>
+            <p class="coupon-msg hidden" id="coupon-msg" role="alert"></p>
+          </form>
           <div class="seg" id="pay-method" role="radiogroup" aria-label="Payment method">
             <button type="button" role="radio" data-method="cash">💵 Cash</button>
             <button type="button" role="radio" data-method="upi">📱 UPI</button>
@@ -271,10 +294,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=20"></script>
-  <script src="js/common.js?v=20"></script>
-  <script src="js/notify.js?v=20"></script>
-  <script src="js/shell.js?v=20"></script>
+  <script src="js/config.js?v=21"></script>
+  <script src="js/common.js?v=21"></script>
+  <script src="js/notify.js?v=21"></script>
+  <script src="js/shell.js?v=21"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -284,6 +307,9 @@
     let activeCat = "All";
     let payMethod = "cash";
     let saved = null; // order returned by create_order
+    let coupon = null; // check_coupon result for the bill as it is now
+    let couponCode = ""; // code the cashier applied; re-checked whenever the bill may have changed
+    let couponSeq = 0; // ignores answers to superseded checks
     let pending = [];
     let stock = { hide_out_of_stock: true, items: {} };
     let lowStock = [];
@@ -570,6 +596,7 @@
       document.getElementById("item-filter").value = "";
       activeCat = "All";
       payMethod = "cash";
+      clearCoupon();
       showStep(0);
       modal.classList.remove("hidden");
       document.body.style.overflow = "hidden";
@@ -629,8 +656,8 @@
           return toast("Enter a valid 10-digit phone number, or leave it blank.", "error");
         }
         phoneIn.value = p;
-        renderPayment();
         showStep(2);
+        renderPayment();
       } else if (step === 2) {
         await submitOrder();
       } else {
@@ -777,6 +804,8 @@
         return toast(`Only ${st.can_make} × ${item.name} can be made with the current stock.`, "error");
       }
       q ? cart.set(id, q) : cart.delete(id);
+      // The discount no longer matches; the code is checked again at payment.
+      coupon = null;
       renderMenu();
     });
 
@@ -788,25 +817,116 @@
     }
 
     const cartTotal = () => cartLines().reduce((s, l) => s + l.price * l.qty, 0);
+    // What the customer pays: the cart less any applied coupon.
+    const billTotal = () => (coupon ? Number(coupon.total) : cartTotal());
+    const cartItems = () => [...cart].map(([menu_item_id, qty]) => ({ menu_item_id, qty }));
 
     function updateCartTotal() {
       const lines = cartLines();
       const count = lines.reduce((s, l) => s + l.qty, 0);
       document.getElementById("item-count").textContent = `${count} item${count === 1 ? "" : "s"}`;
       document.getElementById("cart-badge").textContent = count;
-      document.getElementById("cart-total").textContent = money(cartTotal());
+      document.getElementById("cart-total").textContent = money(billTotal());
     }
 
     // ---------- Step 3: payment ----------
+    const couponInput = document.getElementById("coupon-code");
+
     function renderPayment() {
-      const total = cartTotal();
       const who = nameIn.value.trim() || "Customer";
       document.getElementById("pay-for").textContent = phoneIn.value ? `${who} · ${phoneIn.value}` : who;
+      renderTotals();
+      // Items or phone may have changed since the coupon was applied.
+      if (couponCode) applyCoupon(couponCode);
+    }
+
+    function renderTotals() {
+      const sub = cartTotal();
+      const total = billTotal();
+      const off = coupon ? Number(coupon.discount) : 0;
       document.getElementById("pay-amount").textContent = money(total);
+      const was = document.getElementById("pay-was");
+      was.classList.toggle("hidden", !coupon);
+      was.innerHTML = coupon ? `<s>${money(sub)}</s> · you save ${money(off)}` : "";
       document.getElementById("pay-items").innerHTML =
-        renderItems(cartLines()) + `<li><strong>Total</strong><strong>${money(total)}</strong></li>`;
+        renderItems(cartLines()) +
+        (coupon
+          ? `<li><span>Subtotal</span><span>${money(sub)}</span></li>
+             <li class="discount-line"><span>Coupon ${esc(coupon.code)}</span><span>−${money(off)}</span></li>`
+          : "") +
+        `<li><strong>Total</strong><strong>${money(total)}</strong></li>`;
+      document.getElementById("coupon-entry").classList.toggle("hidden", !!coupon);
+      document.getElementById("coupon-applied").classList.toggle("hidden", !coupon);
+      if (coupon) {
+        document.getElementById("coupon-name").textContent = coupon.code;
+        document.getElementById("coupon-desc").textContent = coupon.description ? ` · ${coupon.description}` : "";
+      }
+      updateCartTotal();
       setMethod(payMethod);
     }
+
+    function couponMessage(msg) {
+      const el = document.getElementById("coupon-msg");
+      el.textContent = msg || "";
+      el.classList.toggle("hidden", !msg);
+    }
+
+    function clearCoupon() {
+      couponSeq++;
+      coupon = null;
+      couponCode = "";
+      couponInput.value = "";
+      couponInput.disabled = false;
+      document.getElementById("coupon-apply").disabled = false;
+      couponMessage("");
+    }
+
+    // Asks the server what the code is worth on this bill. Save waits for it.
+    async function applyCoupon(code) {
+      code = code.trim().toUpperCase();
+      couponMessage("");
+      if (!code) return couponMessage("Enter a coupon code.");
+      const seq = ++couponSeq;
+      const applyBtn = document.getElementById("coupon-apply");
+      couponInput.disabled = applyBtn.disabled = nextBtn.disabled = true;
+      applyBtn.textContent = "Checking…";
+      try {
+        const res = await rpc("check_coupon", {
+          p_token: me.token,
+          p_code: code,
+          p_phone: phoneIn.value || null,
+          p_items: cartItems(),
+        });
+        if (seq !== couponSeq) return;
+        coupon = res;
+        couponCode = res.code;
+        couponInput.value = res.code;
+      } catch (err) {
+        if (seq !== couponSeq) return;
+        coupon = null;
+        couponCode = "";
+        couponInput.value = code;
+        couponMessage(err.message);
+      } finally {
+        if (seq === couponSeq) {
+          couponInput.disabled = applyBtn.disabled = false;
+          applyBtn.textContent = "Apply";
+          if (step === 2) nextBtn.disabled = false;
+          renderTotals();
+        }
+      }
+    }
+
+    document.getElementById("coupon-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      applyCoupon(couponInput.value);
+    });
+    couponInput.addEventListener("input", () => couponMessage(""));
+    document.getElementById("coupon-remove").addEventListener("click", () => {
+      clearCoupon();
+      renderTotals();
+      couponInput.focus();
+    });
 
     function setMethod(m) {
       payMethod = m;
@@ -815,7 +935,7 @@
       );
       const upi = m === "upi";
       document.getElementById("upi-box").classList.toggle("hidden", !upi);
-      if (upi) App.renderQR(document.getElementById("qr"), cartTotal());
+      if (upi) App.renderQR(document.getElementById("qr"), billTotal());
     }
 
     document.getElementById("pay-method").addEventListener("click", (e) => {
@@ -824,6 +944,11 @@
     });
 
     async function submitOrder() {
+      // A typed code that was never applied would silently be ignored.
+      if (!coupon && couponInput.value.trim()) {
+        couponInput.focus();
+        return toast("Tap Apply to use the coupon, or clear the code.", "error");
+      }
       nextBtn.disabled = true;
       nextBtn.textContent = "Saving…";
       try {
@@ -831,10 +956,12 @@
           p_token: me.token,
           p_phone: phoneIn.value || null,
           p_customer_name: nameIn.value.trim() || null,
-          p_items: [...cart].map(([menu_item_id, qty]) => ({ menu_item_id, qty })),
+          p_items: cartItems(),
           p_payment_method: payMethod,
+          p_coupon_code: coupon ? coupon.code : null,
         });
         cart.clear();
+        clearCoupon();
         renderSaved();
         showStep(3);
         toast(`Order #${saved.id} saved · ${money(saved.total)}`, "success");
@@ -862,7 +989,8 @@
         ? `Order #${o.id} · awaiting payment`
         : `Order #${o.id} · paid`;
       document.getElementById("done-sub").textContent =
-        [methodLabel(o.payment_method), o.customer_name || "Customer", o.phone].filter(Boolean).join(" · ");
+        [methodLabel(o.payment_method), o.customer_name || "Customer", o.phone].filter(Boolean).join(" · ") +
+        (Number(o.discount) > 0 ? ` · ${o.coupon_code || "Coupon"} −${money(o.discount)}` : "");
       document.getElementById("done-amount").textContent = money(o.total);
       document.getElementById("done-paid").classList.toggle("hidden", !isPending);
       document.getElementById("done-qr-wrap").classList.toggle("hidden", !isPending);

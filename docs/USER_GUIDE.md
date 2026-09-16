@@ -22,6 +22,8 @@ Live site: https://ogfoods.github.io/pos/
 | Open / close own cash shift | — | ✅ | ✅ |
 | Kitchen screen | — | ✅ | ✅ |
 | Sales report and all shifts | — | ❌ | ✅ |
+| Apply a coupon to a bill | — | ✅ | ✅ |
+| Create and manage coupons | — | ❌ | ✅ |
 
 ---
 
@@ -109,14 +111,19 @@ Without a number the bill still saves and prints normally, but it will not appea
 
 ### Step 3 — Payment
 1. Check the customer, item list and **total amount**.
-2. Pick the payment method: **Cash**, **UPI** or **Card**.
+2. *(Optional)* Type a **coupon code** and click **Apply**. The discount shows as its own line, the big amount and the UPI QR change to the new total, and the struck-through old price shows how much the customer saves. **Remove** takes it off again. Only one coupon per bill.
+   - If the code cannot be used, the reason appears under the box (expired, used up, bill too small, doesn't cover these items…).
+   - Coupons limited per customer need the phone number: click **Back**, enter it, then **Next**.
+   - If you go back and change the items or the phone number, the coupon is checked again when you return.
+   - A code typed but not applied blocks **Save bill** until you apply or clear it.
+3. Pick the payment method: **Cash**, **UPI** or **Card**.
    - **Cash / Card** — collect the money, then click **Save bill**. The bill is saved as **paid**.
    - **UPI** — the customer scans the **QR code** with any UPI app (GPay, PhonePe, Paytm, etc.; amount pre-filled). Click **Save bill**. The bill is saved as **pending**.
-3. The saved screen shows the order number and status:
+4. The saved screen shows the order number and status:
    - For UPI, keep the QR on screen. When the payment shows in your UPI app, click **✓ Payment received** to mark it **paid**.
    - **🖨️ Print receipt** prints a 58 mm receipt.
    - **WhatsApp** opens WhatsApp with the bill summary addressed to the customer's number. Greyed out when the bill has no number.
-4. Click **New bill** for the next customer, or close the window.
+5. Click **New bill** for the next customer, or close the window.
 
 An order with a phone number is saved under it and appears in that customer's history immediately.
 
@@ -276,6 +283,22 @@ The screen shows "Stock after saving" before you save, and **History** lists eve
 | **Unticked** | Items stay visible with a red **⚠**. Tap it to see which ingredient is short, how much is left and how much each item needs. The bill still saves, stock goes below zero, and a "Stock below zero: …" message appears. |
 
 In both modes, items running low show an amber **⚠** with the same details. The menu page also marks items **out of stock** / **low stock**.
+
+### 5.7 Coupons
+
+**Where:** Dashboard → **Coupons** (`coupons.html`)
+
+1. Fill in the form and click **Create coupon**:
+   - **Code** — 3–20 letters, numbers, `-` or `_`. Not case sensitive for cashiers.
+   - **Type** — **Percentage off** (with an optional **maximum discount**), **Flat amount off**, or **Buy X, get Y free** (in every group of X + Y eligible items the cheapest Y are free; optional maximum discount).
+   - **Minimum bill** — bill total before discount.
+   - **Valid from / Valid until** — IST dates, both inclusive. Leave blank for no limit.
+   - **Total uses** and **Uses per customer** — blank means unlimited. A per-customer limit needs the customer's phone number on the bill.
+   - **Applies to** — the whole bill, or only the ticked **categories** and/or **items**. The discount is worked out on those items only.
+2. The list shows each coupon's offer, validity, uses so far, total discount given and status (**active**, **scheduled**, **expired**, **used up**, **off**).
+3. **Edit** changes a coupon, **Switch off / on** pauses it, **Delete** removes it. Past bills keep their coupon code and discount either way.
+
+Cancelled bills do not count as uses. Sales, shifts and receipts use the amount after discount. Coupon changes appear in the audit log.
 
 ---
 

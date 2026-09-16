@@ -305,6 +305,8 @@
     if (!upiConfigured()) el.insertAdjacentHTML("beforeend", `<div class="qr-warn">Sample UPI ID. Set your real one in Settings.</div>`);
   }
 
+  const hasDiscount = (o) => Number(o && o.discount) > 0;
+
   // Receipt sized for a 58mm thermal printer. `o` is an order from create_order / get_order.
   function receiptHtml(o) {
     const items = (o.items || [])
@@ -325,6 +327,10 @@
       <hr>
       ${items}
       <hr>
+      ${hasDiscount(o)
+        ? `<div class="rc-row"><span>Subtotal</span><span>${money(o.subtotal)}</span></div>
+           <div class="rc-row"><span>Coupon ${esc(o.coupon_code || "")}</span><span>-${money(o.discount)}</span></div>`
+        : ""}
       <div class="rc-row rc-total"><span>TOTAL</span><span>${money(o.total)}</span></div>
       <div class="rc-row"><span>Payment</span><span>${methodLabel(o.payment_method)} · ${esc(String(o.payment_status).toUpperCase())}</span></div>
       <hr>
@@ -393,6 +399,9 @@
       "",
       ...(o.items || []).map((i) => `${i.qty} × ${i.name} — ${money(i.price * i.qty)}`),
       "",
+      ...(hasDiscount(o)
+        ? [`Subtotal: ${money(o.subtotal)}`, `Coupon ${o.coupon_code || ""}: -${money(o.discount)}`]
+        : []),
       `*Total: ${money(o.total)}*`,
       `Payment: ${methodLabel(o.payment_method)} (${o.payment_status})`,
       "",
@@ -405,7 +414,7 @@
 
   window.App = {
     cfg, db, rpc, session, requireAdmin, logout, money, fmtDate, esc, digits, toast, renderItems, flash,
-    methodLabel, renderQR, printReceipt, whatsappUrl, setWhatsapp, applySettings, upiConfigured,
+    methodLabel, renderQR, hasDiscount, printReceipt, whatsappUrl, setWhatsapp, applySettings, upiConfigured,
     confirm: confirmDialog, prompt: promptDialog,
     printHtml, printShiftReport, cashDiff, settingsReady,
   };

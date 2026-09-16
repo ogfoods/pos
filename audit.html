@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=20" />
+  <link rel="stylesheet" href="css/style.css?v=21" />
 </head>
 <body>
   <header class="topbar">
@@ -46,15 +46,15 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=20"></script>
-  <script src="js/common.js?v=20"></script>
-  <script src="js/notify.js?v=20"></script>
-  <script src="js/shell.js?v=20"></script>
+  <script src="js/config.js?v=21"></script>
+  <script src="js/common.js?v=21"></script>
+  <script src="js/notify.js?v=21"></script>
+  <script src="js/shell.js?v=21"></script>
   <script>
     const { rpc, money, fmtDate, esc, toast, methodLabel } = App;
     const $ = (id) => document.getElementById(id);
     const PAGE = 50;
-    const CATS = [["", "All"], ["order", "Orders"], ["kitchen", "Kitchen"], ["stock", "Stock"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["shift", "Shifts"], ["settings", "Settings"]];
+    const CATS = [["", "All"], ["order", "Orders"], ["kitchen", "Kitchen"], ["stock", "Stock"], ["menu", "Menu"], ["ingredient", "Ingredients"], ["staff", "Staff"], ["shift", "Shifts"], ["settings", "Settings"], ["coupon", "Coupons"]];
     const LABELS = {
       "order.status": "Bill status changed",
       "kitchen.status": "Kitchen status changed",
@@ -64,6 +64,9 @@
       "stock.settings": "Stock tracking changed",
       "order.paid": "Payment confirmed",
       "order.delete": "Bill deleted",
+      "coupon.create": "Coupon created",
+      "coupon.update": "Coupon edited",
+      "coupon.delete": "Coupon deleted",
       "menu.create": "Menu item added",
       "menu.update": "Menu item edited",
       "menu.delete": "Menu item deleted",

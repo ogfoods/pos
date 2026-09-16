@@ -22,6 +22,7 @@ Docs: [Architecture](docs/ARCHITECTURE.md) · [User guide](docs/USER_GUIDE.md)
 | `pending.html` | Admins | Waiting room until a super admin allows the sign-in |
 | `offline.html` | Everyone | Shown when a page is opened with no connection |
 | `kitchen.html` | All admins | Kitchen display: live queue new → preparing → ready → served, late colours, chime |
+| `coupons.html` | Super admin | Create coupons (percentage, flat, buy X get Y), limit them to items or categories, set validity dates, minimum bill, total and per-customer uses |
 | `sales.html` | Super admin | Sales by day/hour, payment methods, top items, staff, shift closes |
 
 ## Setup
