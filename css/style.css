@@ -239,8 +239,14 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 .5rem; }
 .link-btn svg { display: none; }
 
 @media (max-width: 560px) {
-  .bill-backdrop { padding: 0; }
-  .bill { max-width: none; height: 100%; max-height: none; border-radius: 0; overflow: hidden; }
+  /* Anchored to the top and shortened by the keyboard, so the cart bar and
+     Next button stay just above it instead of being buried under it. */
+  .bill-backdrop { padding: 0; align-items: flex-start; }
+  .bill {
+    max-width: none; max-height: none; border-radius: 0; overflow: hidden;
+    height: calc(100% - var(--kb, 0px));
+    transition: height .15s ease;
+  }
   .bill .modal-body { padding: 1.1rem 1rem; }
 
   .bill-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: .5rem; padding: .8rem 1rem; background: var(--primary); color: #fff; border-bottom: 0; }

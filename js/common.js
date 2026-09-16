@@ -26,6 +26,23 @@
     },
   };
 
+  // --kb is how much of the screen the on-screen keyboard is covering.
+  // The viewport meta (interactive-widget=resizes-content) already handles
+  // this on Android Chrome, where --kb stays 0; this covers iOS Safari and
+  // older browsers, so a fixed footer can sit above the keyboard either way.
+  (function trackKeyboard() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const set = () => {
+      const gap = window.innerHeight - vv.height - vv.offsetTop;
+      // Small gaps are the browser's own toolbars, not a keyboard.
+      document.documentElement.style.setProperty("--kb", (gap > 60 ? Math.round(gap) : 0) + "px");
+    };
+    vv.addEventListener("resize", set);
+    vv.addEventListener("scroll", set);
+    set();
+  })();
+
   // Message shown on the login page after the server ends a session.
   const FLASH_KEY = "pos_flash";
   const flash = {

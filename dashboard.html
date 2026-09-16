@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
   <title>Admin Dashboard</title>
   <meta name="theme-color" content="#d9480f" />
   <link rel="manifest" href="manifest.webmanifest" />
@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="css/style.css?v=16" />
+  <link rel="stylesheet" href="css/style.css?v=17" />
 </head>
 <body>
   <header class="topbar">
@@ -192,11 +192,11 @@
           <h3 class="step-title">Customer details</h3>
           <div class="field">
             <label for="c-phone">Phone number *</label>
-            <input class="input" id="c-phone" type="tel" inputmode="numeric" autocomplete="off" pattern="[0-9]{10}" placeholder="10-digit number, e.g. 9876543210" />
+            <input class="input" id="c-phone" type="tel" inputmode="numeric" enterkeyhint="next" autocomplete="off" pattern="[0-9]{10}" placeholder="10-digit number, e.g. 9876543210" />
           </div>
           <div class="field">
             <label for="c-name">Customer name <span class="muted">(optional)</span></label>
-            <input class="input" id="c-name" maxlength="80" />
+            <input class="input" id="c-name" maxlength="80" enterkeyhint="next" />
           </div>
         </section>
 
@@ -205,7 +205,7 @@
           <h3 class="step-title">Select items</h3>
           <div class="search-field">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <input class="input" id="item-filter" type="search" placeholder="Filter items…" aria-label="Filter items" />
+            <input class="input" id="item-filter" type="search" enterkeyhint="done" placeholder="Filter items…" aria-label="Filter items" />
           </div>
           <div class="chips" id="chips" role="toolbar" aria-label="Categories"></div>
           <div class="menu-pick" id="menu-pick"></div>
@@ -269,10 +269,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="js/config.js?v=16"></script>
-  <script src="js/common.js?v=16"></script>
-  <script src="js/notify.js?v=16"></script>
-  <script src="js/shell.js?v=16"></script>
+  <script src="js/config.js?v=17"></script>
+  <script src="js/common.js?v=17"></script>
+  <script src="js/notify.js?v=17"></script>
+  <script src="js/shell.js?v=17"></script>
   <script>
     const { rpc, money, fmtDate, esc, digits, toast, renderItems, methodLabel } = App;
     let me = null;
@@ -535,8 +535,19 @@
       const clean = digits(phoneIn.value).slice(0, 10);
       if (phoneIn.value !== clean) phoneIn.value = clean;
     });
-    phoneIn.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") nextBtn.click();
+    // The keyboard's Enter key doubles as Next on the customer step, and
+    // just closes the keyboard while filtering items.
+    [phoneIn, nameIn].forEach((input) =>
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        nextBtn.click();
+      })
+    );
+    document.getElementById("item-filter").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      e.target.blur();
     });
 
     document.getElementById("card-new-bill").addEventListener("click", openBill);
